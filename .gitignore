@@ -1,4 +1,4 @@
 config/config.php
 uploads/
 .env
-__pycache__/
+__pycache__
