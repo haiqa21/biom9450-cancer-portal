@@ -14,6 +14,11 @@
   --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
 }
 
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
 
 h1 {
 	color: var(--text-heading);

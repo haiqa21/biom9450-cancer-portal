@@ -1,0 +1,111 @@
+@import url(palette.css);
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    background-color: var(--background);
+    font-family: var(--font-sans);
+    color: var(--text-body);
+}
+
+#logout-box {
+    width: 100%;
+    max-width: 420px;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(15, 27, 42, 0.06);
+}
+
+.success-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background-color: #E3F0F4;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.logout-header h1 {
+    margin: 0 0 8px;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.subtitle {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.security-note {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    background-color: var(--surface-alt);
+    border-radius: 8px;
+    color: var(--text-muted);
+    text-align: left;
+}
+
+.security-note svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.security-note p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.return-button {
+    width: 100%;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background-color: var(--primary);
+    color: var(--text-on-primary);
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background-color 0.15s;
+}
+
+.return-button:hover {
+    background-color: var(--primary-hover);
+    color: var(--text-on-primary);
+}
+
+.return-button:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+    #logout-box {
+        padding: 28px 20px;
+        border: none;
+        box-shadow: none;
+        background-color: transparent;
+    }
+}
