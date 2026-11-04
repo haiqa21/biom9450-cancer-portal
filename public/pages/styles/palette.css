@@ -1,0 +1,33 @@
+:root {
+  --background: #F7F9FB; 
+	--surface: #FFFFFF; 
+	--surface-alt: #EEF2F6; 
+	--border: #D5DDE5;
+  --primary: #0E6E8C; 
+	--primary-hover: #0A5670; 
+	--accent: #6C4BB4;
+  --text-heading: #0F1B2A; 
+	--text-body: #2B3A4A; 
+	--text-muted: #5E6E7E; 
+	--text-on-primary: #FFFFFF;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+}
+
+
+h1 {
+	color: var(--text-heading);
+}
+
+label, p, a {
+	color: var(--text-body)
+}
+
+button {
+	background-color: var(--primary);
+	color: var(--text-on-primary);
+}
+
+button:hover {
+	background-color: var(--primary-hover);
+}
