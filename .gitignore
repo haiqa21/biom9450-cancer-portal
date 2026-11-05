@@ -2,3 +2,5 @@ config/config.php
 uploads/
 .env
 __pycache__
+
+public/pages/template.html
