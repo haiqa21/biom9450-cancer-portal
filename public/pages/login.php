@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              JOIN professionals p ON p.user_id = u.user_id
              WHERE u.email = ?
              AND u.role = 'professional'
-             AND p.professional_type = ?"
+             AND p.professional_type = ?" // placeholders - to prevenet SQL injection!!
         );
         $stmt->execute([$email, $role]);
 
