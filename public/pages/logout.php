@@ -24,7 +24,7 @@
                 <p class="subtitle">Thanks for using CancerInsight.</p>
             </div>
 
-            <a href="login.html" class="return-button">Return to sign in</a>
+            <a href="login.php" class="return-button">Return to sign in</a>
         </main>
     </body>
 </html>
