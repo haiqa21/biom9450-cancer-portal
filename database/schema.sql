@@ -77,25 +77,6 @@ CREATE TABLE mutations (
         FOREIGN KEY (gene_id) REFERENCES genes(gene_id)
 ) ENGINE=InnoDB;
 
-
-
--- patient_mutations: mutations found in a sample (many-to-many link)
-CREATE TABLE patient_mutations (
-    sample_id         INT UNSIGNED NOT NULL,
-    mutation_id       INT UNSIGNED NOT NULL,
-    allele_frequency  DECIMAL(5,4) NULL,               -- 0.0000 to 1.0000
-    PRIMARY KEY (sample_id, mutation_id),
-    CONSTRAINT chk_allele_frequency
-        CHECK (allele_frequency IS NULL OR allele_frequency BETWEEN 0 AND 1),
-    CONSTRAINT fk_pm_sample
-        FOREIGN KEY (sample_id) REFERENCES samples(sample_id)
-        ON DELETE CASCADE,
-    CONSTRAINT fk_pm_mutation
-        FOREIGN KEY (mutation_id) REFERENCES mutations(mutation_id)
-        ON DELETE CASCADE
-) ENGINE=InnoDB;
-
-
 -- patient_diagnoses table: diagnosis history, links patients to cancer types
 CREATE TABLE patient_diagnoses (
     diagnosis_id        INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -127,6 +108,23 @@ CREATE TABLE samples (
         FOREIGN KEY (diagnosis_id) REFERENCES patient_diagnoses(diagnosis_id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB;
+
+-- patient_mutations: mutations found in a sample (many-to-many link)
+CREATE TABLE patient_mutations (
+    sample_id         INT UNSIGNED NOT NULL,
+    mutation_id       INT UNSIGNED NOT NULL,
+    allele_frequency  DECIMAL(5,4) NULL,               -- 0.0000 to 1.0000
+    PRIMARY KEY (sample_id, mutation_id),
+    CONSTRAINT chk_allele_frequency
+        CHECK (allele_frequency IS NULL OR allele_frequency BETWEEN 0 AND 1),
+    CONSTRAINT fk_pm_sample
+        FOREIGN KEY (sample_id) REFERENCES samples(sample_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_pm_mutation
+        FOREIGN KEY (mutation_id) REFERENCES mutations(mutation_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 
 
 -- predictions table: one row per model run (who, for whom, which model, when)
