@@ -4,3 +4,4 @@ uploads/
 __pycache__
 
 public/pages/template.html
+public/pages/styles/test.css
