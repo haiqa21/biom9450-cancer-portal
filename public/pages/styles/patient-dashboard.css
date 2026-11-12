@@ -1,0 +1,160 @@
+
+
+.cancer-type {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sub-heading {
+    margin: 18px 0 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.plain-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 14px;
+}
+
+.small {
+    margin-top: 14px;
+    font-size: 13px;
+}
+
+.summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 16px;
+    background: var(--surface);
+}
+
+.summary-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-heading);
+}
+
+.summary-label {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.explainer-toggle {
+    margin-top: 16px;
+}
+
+.btn-small {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+}
+
+.explainer[hidden] {
+    display: none;
+}
+
+.explainer {
+    max-width: 68ch;
+    margin: 14px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.gene {
+    font-style: italic;   
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+.sample-list {
+    list-style: none;
+    margin: 18px 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.sample-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-alt);
+    font-size: 13px;
+}
+
+.table-tools {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.table-tools label {
+    color: var(--text-muted);
+}
+
+.table-tools select {
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.allele .ref { color: var(--text-muted); }
+.allele .alt { color: var(--text-heading); font-weight: 600; }
+
+.show-more {
+    margin-top: 12px;
+}
+
+.key {
+    margin-top: 16px;
+    font-size: 14px;
+}
+
+.key summary {
+    cursor: pointer;
+    color: var(--primary);
+    font-weight: 500;
+}
+
+.key ul {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.key .chip {
+    min-width: 58px;
+    justify-content: center;
+    margin-right: 8px;
+}
+
+@media (max-width: 600px) {
+    .summary { grid-template-columns: minmax(0, 1fr); }
+}

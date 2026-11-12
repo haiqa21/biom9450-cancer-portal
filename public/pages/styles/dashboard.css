@@ -1,0 +1,146 @@
+.explorer-filters {
+    margin-bottom: 14px;
+}
+
+.explorer-filters .field input { width: 130px; }
+
+.explorer {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+.related {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-alt);
+}
+
+.related h3 { margin-top: 6px; }
+.related h3.mono { margin-top: 0; font-size: 13px; word-break: break-all; }
+
+.people {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.people li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "name chip" "meta chip";
+    align-items: center;
+    column-gap: 10px;
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+}
+
+.people li:first-child { border-top: 0; }
+.people a { grid-area: name; font-weight: 500; color: var(--text-heading); text-decoration: none; }
+.people a:hover { color: var(--primary); text-decoration: underline; }
+.people .small-text { grid-area: meta; }
+.people .chip { grid-area: chip; }
+
+.gene {
+    font-style: italic;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+/* researcher: gene picker and chart slot */
+
+.gene-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 14px;
+    padding: 0;
+    border: 0;
+}
+
+.gene-picker legend {
+    margin-bottom: 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.gene-picker label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 13px;
+    font-style: italic;
+    cursor: pointer;
+}
+
+.gene-picker input { accent-color: var(--primary); margin: 0; }
+
+.gene-picker label:has(input:checked) {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.gene-picker-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-bottom: 12px;
+    font-size: 13px;
+}
+
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Plain HTML bars shown until the visualisation teammate's chart replaces them */
+.gene-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gene-bar {
+    display: grid;
+    grid-template-columns: 90px minmax(0, 1fr) 36px;
+    gap: 10px;
+    align-items: center;
+}
+
+.gene-bar .track { display: flex; height: 14px; }
+.gene-bar .seg { height: 100%; margin-right: 2px; }
+.gene-bar .seg:last-child { border-radius: 0 4px 4px 0; }
+.gene-bar .total { text-align: right; font-weight: 600; color: var(--text-heading); font-variant-numeric: tabular-nums; }
+
+.seg-breast   { background: var(--cancer-breast); }
+.seg-brain    { background: var(--cancer-brain); }
+.seg-liver    { background: var(--cancer-liver); }
+.seg-prostate { background: var(--cancer-prostate); }
+.seg-blood    { background: var(--cancer-blood); }
+.seg-pancreas { background: var(--cancer-pancreas); }
+
+.explorer-full {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 1000px) {
+    .explorer { grid-template-columns: minmax(0, 1fr); }
+}
