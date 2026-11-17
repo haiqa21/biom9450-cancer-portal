@@ -1,3 +1,4 @@
+
 <?php
 // Patients card shared by the oncologist and researcher dashboards.
 // Needs: $patients, $patientTotal, $patientPage, $patientSearch, $patientCancer, $options
@@ -12,9 +13,13 @@ $patientPages = max(1, (int)ceil($patientTotal / DASHBOARD_PAGE_SIZE));
                 <input type="hidden" name="<?= e($keep) ?>" value="<?= e($_GET[$keep]) ?>">
                 <?php endif; ?>
             <?php endforeach; ?>
-            <?php foreach ($_GET['genes'] ?? [] as $g): ?>
-            <input type="hidden" name="genes[]" value="<?= e($g) ?>">
-            <?php endforeach; ?>
+
+            <?php if (isset($_GET['genes']) && is_array($_GET['genes'])): ?>
+                <?php foreach ($_GET['genes'] as $g): ?>
+                    <input type="hidden" name="genes[]" value="<?= e($g) ?>">
+                <?php endforeach; ?>
+            <?php endif; ?>
+
             <div class="field">
                 <label for="q">Search</label>
                 <input id="q" name="q" value="<?= e($patientSearch) ?>" placeholder="Name or patient ID">
@@ -63,23 +68,35 @@ $patientPages = max(1, (int)ceil($patientTotal / DASHBOARD_PAGE_SIZE));
                     <td><?= $p['stage'] && $p['stage'] !== 'unknown' ? e($p['stage']) : '<span class="muted">Unknown</span>' ?></td>
                     <td>
                         <?php if ($p['status']): ?>
-                        <span class="chip <?= $p['status'] === 'active' ? 'chip-success' : '' ?>"><?= e(ucfirst($p['status'])) ?></span>
+                        <span class="chip <?= $p['status'] === 'active' ? 'chip-success' : '' ?>">
+                            <?= e(ucfirst($p['status'])) ?>
+                        </span>
+                        <?php else: ?>
+                        <span class="muted">Not recorded</span>
                         <?php endif; ?>
                     </td>
                     <td class="num"><?= e($p['mutation_count']) ?></td>
                     <td>
                         <?php if ($p['prediction']): ?>
-                            <?php $match = $p['prediction']['cancer'] === $p['cancer_name']; ?>
-                            <span class="chip <?= $match ? 'chip-success' : 'chip-error' ?>"
-                                  title="<?= $match ? 'Matches the diagnosis' : 'Does not match the diagnosis' ?>">
-                                <?= e($p['prediction']['cancer']) ?> · <?= round($p['prediction']['probability'] * 100) ?>%
-                            </span>
+                            <?php if ($p['cancer_name']): ?>
+                                <?php $match = $p['prediction']['cancer'] === $p['cancer_name']; ?>
+                                <span class="chip <?= $match ? 'chip-success' : 'chip-error' ?>"
+                                      title="<?= $match ? 'Matches the recorded diagnosis' : 'Differs from the recorded diagnosis' ?>">
+                                    <?= e($p['prediction']['cancer']) ?> · <?= round($p['prediction']['probability'] * 100) ?>%
+                                </span>
+                            <?php else: ?>
+                                <span class="chip">
+                                    <?= e($p['prediction']['cancer']) ?> · <?= round($p['prediction']['probability'] * 100) ?>%
+                                </span>
+                                <div class="muted small-text">No diagnosis to compare</div>
+                            <?php endif; ?>
                         <?php else: ?>
                             <span class="muted">Not run</span>
                         <?php endif; ?>
                     </td>
                 </tr>
                 <?php endforeach; ?>
+
                 <?php if (!$patients): ?>
                 <tr><td colspan="7" class="empty">No patients match this search.</td></tr>
                 <?php endif; ?>
