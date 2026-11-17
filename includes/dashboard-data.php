@@ -233,13 +233,20 @@ function dashboard_related(array $src, int $mutationId, int $patientId): ?array
         return null;
     }
 
-    $patientSql = 'SELECT DISTINCT p.patient_id, p.first_name, p.last_name, p.birthdate, p.sex, ct.cancer_name
-                   FROM patient_mutations pm
-                   JOIN mutations m ON m.mutation_id = pm.mutation_id
-                   JOIN samples s ON s.sample_id = pm.sample_id
-                   JOIN patients p ON p.patient_id = s.patient_id
-                   LEFT JOIN patient_diagnoses d ON d.diagnosis_id = s.diagnosis_id
-                   LEFT JOIN cancer_types ct ON ct.cancer_type_id = d.cancer_type_id';
+    $patientSql = 'SELECT DISTINCT
+                   p.patient_id,
+                   p.first_name,
+                   p.last_name,
+                   p.birthdate,
+                   p.sex,
+                   ct.cancer_name
+               FROM patient_mutations pm
+               JOIN mutations m ON m.mutation_id = pm.mutation_id
+               JOIN samples s ON s.sample_id = pm.sample_id
+               JOIN patients p ON p.patient_id = s.patient_id
+               LEFT JOIN sample_diagnoses sd ON sd.sample_id = s.sample_id
+               LEFT JOIN patient_diagnoses d ON d.diagnosis_id = sd.diagnosis_id
+               LEFT JOIN cancer_types ct ON ct.cancer_type_id = d.cancer_type_id';
 
     $stmt = $pdo->prepare("$patientSql WHERE pm.mutation_id = ? AND p.patient_id <> ? ORDER BY p.last_name, p.first_name, p.patient_id");
     $stmt->execute([$mutationId, $patientId]);
@@ -304,15 +311,19 @@ function dashboard_gene_counts(array $src, array $symbols): array
 
     $in = implode(',', array_fill(0, count($symbols), '?'));
     $stmt = $src['pdo']->prepare(
-        "SELECT g.gene_symbol, ct.cancer_name, COUNT(DISTINCT s.patient_id) AS patients
-         FROM patient_mutations pm
-         JOIN mutations m ON m.mutation_id = pm.mutation_id
-         JOIN genes g ON g.gene_id = m.gene_id
-         JOIN samples s ON s.sample_id = pm.sample_id
-         JOIN patient_diagnoses d ON d.diagnosis_id = s.diagnosis_id
-         JOIN cancer_types ct ON ct.cancer_type_id = d.cancer_type_id
-         WHERE g.gene_symbol IN ($in)
-         GROUP BY g.gene_symbol, ct.cancer_name"
+        "SELECT
+         g.gene_symbol,
+         ct.cancer_name,
+         COUNT(DISTINCT s.patient_id) AS patients
+        FROM patient_mutations pm
+        JOIN mutations m ON m.mutation_id = pm.mutation_id
+        JOIN genes g ON g.gene_id = m.gene_id
+        JOIN samples s ON s.sample_id = pm.sample_id
+        JOIN sample_diagnoses sd ON sd.sample_id = s.sample_id
+        JOIN patient_diagnoses d ON d.diagnosis_id = sd.diagnosis_id
+        JOIN cancer_types ct ON ct.cancer_type_id = d.cancer_type_id
+        WHERE g.gene_symbol IN ($in)
+        GROUP BY g.gene_symbol, ct.cancer_name"
     );
     $stmt->execute($symbols);
     foreach ($stmt->fetchAll() as $r) {
