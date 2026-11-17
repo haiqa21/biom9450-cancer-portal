@@ -20,6 +20,8 @@ CREATE TABLE patients (
     last_name    VARCHAR(100) NOT NULL,
     birthdate    DATE NOT NULL,
     sex          ENUM('female', 'male', 'other', 'unknown') NOT NULL DEFAULT 'unknown',
+    country      VARCHAR(100) NOT NULL,
+    photo_path   VARCHAR(255) NULL, 
     CONSTRAINT fk_patients_user
         FOREIGN KEY (user_id) REFERENCES users(user_id)
         ON DELETE SET NULL
@@ -90,8 +92,31 @@ CREATE TABLE patient_diagnoses (
         ON DELETE CASCADE,
     CONSTRAINT fk_diag_cancer_type
         FOREIGN KEY (cancer_type_id) REFERENCES cancer_types(cancer_type_id)
-) ENGINE=InnoDB;
+)ENGINE=InnoDB;
 
+-- patient treatments table: treatment history for each diagnosis
+CREATE TABLE patient_treatments (
+    treatment_id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    diagnosis_id          INT UNSIGNED NOT NULL,
+    treatment_type        VARCHAR(100) NOT NULL,
+    treatment_description TEXT NULL,
+    start_date            DATE NULL,
+    end_date              DATE NULL,
+    status                ENUM('ongoing', 'completed', 'discontinued')
+                          NOT NULL DEFAULT 'ongoing',
+    
+     CONSTRAINT fk_treatment_diagnosis
+        FOREIGN KEY (diagnosis_id)
+        REFERENCES patient_diagnoses(diagnosis_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT chk_treatment_dates
+        CHECK (
+            start_date IS NULL
+            OR end_date IS NULL
+            OR end_date >= start_date
+        )
+)ENGINE=InnoDB; 
 
 -- samples table: each sample belongs to a patient and can optionally
 -- be associated with one diagnosis. A diagnosis can have many samples.
@@ -125,7 +150,27 @@ CREATE TABLE patient_mutations (
         ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
-
+-- prediction_mutations table: to be able to retrieve the mutations generated 
+-- each prediciton
+CREATE TABLE prediction_mutations (
+    prediction_id     INT UNSIGNED NOT NULL,
+    mutation_id       INT UNSIGNED NOT NULL, 
+    allele_frequency  DECIMAL(5,4) NULL, 
+    PRIMARY KEY (prediction_id, mutation_id), 
+    CONSTRAINT chk_prediction_allele_frequency
+       CHECK (
+        allele_frequency is NULL
+        or allele_frequency BETWEEN 0 and 1
+       ), 
+    CONSTRAINT fk_pred_mut_prediction
+        FOREIGN KEY (prediction_id)
+        REFERENCES predictions(prediction_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_pred_mut_mutation
+        FOREIGN KEY (mutation_id)
+        REFERENCES mutations(mutation_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB;
 
 -- predictions table: one row per model run (who, for whom, which model, when)
 CREATE TABLE predictions (
