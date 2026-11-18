@@ -1,0 +1,261 @@
+
+/* Text for screen readers only, e.g. the header of a column of "Compare" links */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+/* Gene symbols are italic by convention */
+.gene {
+    font-style: italic;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+/* Colour dot + cancer name on one line */
+.cancer-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ---------- 2. stat tiles that are links ---------- */
+
+.tile-link {
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.tile-link:hover,
+.tile-link:focus-visible {
+    border-color: var(--primary);
+    box-shadow: 0 1px 0 var(--primary);
+}
+
+/* ---------- prediction status chips ---------- */
+
+/* One colour per workflow stage:
+   grey = not started, amber = waiting on a doctor, blue = in progress,
+   green = released. The text label always says the status, so colour is
+   never the only signal. */
+.status-awaiting_diagnosis { 
+    background: var(--impact-modifier-bg); 
+    border-color: transparent; 
+    color: var(--impact-modifier); 
+}
+
+.status-pending_review     { 
+    background: var(--warning-bg);         
+    border-color: transparent; 
+    color: var(--warning); 
+}
+.status-reviewed           { 
+    background: var(--impact-low-bg);      
+    border-color: transparent; 
+    color: var(--impact-low); 
+}
+.status-report_draft       { 
+    background: var(--surface);            
+    border-color: var(--impact-low); 
+    color: var(--impact-low); 
+}
+.status-released           { 
+    background: var(--success-bg);         
+    border-color: transparent; 
+    color: var(--success); 
+}
+
+/* ---------- chart slots ---------- */
+
+/* Where the visualisation teammate's charts are drawn. Until then the slot
+   holds the plain HTML fallback; the min-height stops the card jumping in
+   size when the real chart replaces it. */
+.chart-slot {
+    min-height: 180px;
+}
+
+/* 3. pipeline fallback: status chip on the left, count on the right */
+.pipeline-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.pipeline-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--grid);
+}
+
+.pipeline-list li:last-child { border-bottom: 0; }
+.pipeline-list a { text-decoration: none; }
+
+.pipeline-count {
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+/* ---------- 5. gene picker and bars ---------- */
+
+.gene-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 14px;
+    padding: 0;
+    border: 0;
+}
+
+.gene-picker legend {
+    margin-bottom: 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.gene-picker label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 13px;
+    font-style: italic;
+    cursor: pointer;
+}
+
+.gene-picker input { 
+    accent-color: var(--primary); 
+    margin: 0; 
+}
+
+.gene-picker label:has(input:checked) {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.gene-picker-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+/* Cancer-type colour key above the chart */
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-bottom: 12px;
+    font-size: 13px;
+}
+
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Fallback bars: gene name | bar track | total */
+.gene-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gene-bar {
+    display: grid;
+    grid-template-columns: 90px minmax(0, 1fr) 36px;
+    gap: 10px;
+    align-items: center;
+}
+
+.gene-bar .track {
+    display: flex;
+    height: 14px;
+    border-radius: 4px;
+    background: var(--surface-alt);
+}
+
+.gene-bar .total {
+    text-align: right;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+/* ---------- 7. patients filter ---------- */
+
+.patient-filters { margin-bottom: 14px; }
+.patient-filters .field input { width: 140px; }
+
+/* ---------- 8. mutation explorer ---------- */
+
+.explorer-filters { margin-bottom: 14px; }
+.explorer-filters .field input { width: 130px; }
+
+/* Table on the left, related-patients panel on the right */
+.explorer {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+/* No mutation selected: the table takes the full width */
+.explorer-full { grid-template-columns: minmax(0, 1fr); }
+
+.related {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-alt);
+}
+
+.related h3 { margin-top: 6px; }
+.related h3.mono { margin-top: 0; font-size: 13px; word-break: break-all; }
+.related .btn { align-self: flex-start; margin-top: 6px; }
+
+/* Each related patient: ID link and age/sex on the left, cancer chip on the right */
+.people {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.people li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "name chip" "meta chip";
+    align-items: center;
+    column-gap: 10px;
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+}
+
+.people li:first-child { border-top: 0; }
+.people a { grid-area: name; font-weight: 500; color: var(--text-heading); text-decoration: none; }
+.people a:hover { color: var(--primary); text-decoration: underline; }
+.people .small-text { grid-area: meta; }
+.people .chip { grid-area: chip; }
+
+/* ---------- small screens ---------- */
+
+/* Below 1000px the related panel drops under the table */
+@media (max-width: 1000px) {
+    .explorer { grid-template-columns: minmax(0, 1fr); }
+}
