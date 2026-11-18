@@ -22,20 +22,16 @@ CREATE TABLE users (
 ) ENGINE=InnoDB;
 
 
--- ==========================================
--- 2. PATIENTS TABLE
--- ==========================================
-
+-- patients table
 CREATE TABLE patients (
     patient_id   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id      INT UNSIGNED NULL UNIQUE,
     first_name   VARCHAR(100) NOT NULL,
     last_name    VARCHAR(100) NOT NULL,
     birthdate    DATE NOT NULL,
-    sex          ENUM('female', 'male', 'other', 'unknown')
-                 NOT NULL DEFAULT 'unknown',
-    country      VARCHAR(100) NULL,
-
+    sex          ENUM('female', 'male', 'other', 'unknown') NOT NULL DEFAULT 'unknown',
+    country      VARCHAR(100) NOT NULL,
+    photo_path   VARCHAR(255) NULL,
     CONSTRAINT fk_patients_user
         FOREIGN KEY (user_id) REFERENCES users(user_id)
         ON DELETE SET NULL
@@ -95,25 +91,13 @@ CREATE TABLE mutations (
     genomic_position      BIGINT UNSIGNED NOT NULL,
     original_allele       VARCHAR(255) NULL,
     altered_allele        VARCHAR(255) NULL,
-    mutation_type         VARCHAR(50) NOT NULL,
-    clinical_significance ENUM(
-        'pathogenic',
-        'likely_pathogenic',
-        'uncertain',
-        'likely_benign',
-        'benign',
-        'unknown'
-    ) NOT NULL DEFAULT 'unknown',
-    genome_assembly       VARCHAR(20) NOT NULL DEFAULT 'GRCh38',
-
-    UNIQUE KEY uq_mutation (
-        gene_id,
-        genomic_position,
-        original_allele(50),
-        altered_allele(50),
-        genome_assembly
-    ),
-
+    mutation_type         VARCHAR(50)  NOT NULL,
+    clinical_significance ENUM('pathogenic', 'likely_pathogenic', 'uncertain',
+                               'likely_benign', 'benign', 'unknown')
+                               NOT NULL DEFAULT 'unknown',
+    genome_assembly       VARCHAR(20)  NOT NULL DEFAULT 'GRCh38',
+    UNIQUE KEY uq_mutation (gene_id, genomic_position,
+                            original_allele(50), altered_allele(50), genome_assembly),
     INDEX idx_mutation_position (genomic_position),
 
     CONSTRAINT fk_mutations_gene
@@ -121,10 +105,7 @@ CREATE TABLE mutations (
 ) ENGINE=InnoDB;
 
 
--- ==========================================
--- 7. PATIENT DIAGNOSES TABLE
--- ==========================================
-
+-- patient_diagnoses table: diagnosis history, links patients to cancer types
 CREATE TABLE patient_diagnoses (
     diagnosis_id        INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     patient_id          INT UNSIGNED NOT NULL,
@@ -146,36 +127,63 @@ CREATE TABLE patient_diagnoses (
 ) ENGINE=InnoDB;
 
 
--- ==========================================
--- 8. SAMPLES TABLE
--- ==========================================
+-- patient treatments table: treatment history for each diagnosis
+CREATE TABLE patient_treatments (
+    treatment_id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    diagnosis_id          INT UNSIGNED NOT NULL,
+    treatment_type        VARCHAR(100) NOT NULL,
+    treatment_description TEXT NULL,
+    start_date            DATE NULL,
+    end_date              DATE NULL,
+    status                ENUM('ongoing', 'completed', 'discontinued')
+                          NOT NULL DEFAULT 'ongoing',
 
+    CONSTRAINT fk_treatment_diagnosis
+        FOREIGN KEY (diagnosis_id)
+        REFERENCES patient_diagnoses(diagnosis_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT chk_treatment_dates
+        CHECK (
+            start_date IS NULL
+            OR end_date IS NULL
+            OR end_date >= start_date
+        )
+) ENGINE=InnoDB;
+
+
+-- samples table: each sample belongs to a patient
 CREATE TABLE samples (
     sample_id      INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     sample_code    VARCHAR(50) NOT NULL UNIQUE,
     patient_id     INT UNSIGNED NOT NULL,
-    diagnosis_id   INT UNSIGNED NULL,
     date_detected  DATE NULL,
 
     CONSTRAINT fk_samples_patient
         FOREIGN KEY (patient_id) REFERENCES patients(patient_id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT fk_samples_diagnosis
-        FOREIGN KEY (diagnosis_id) REFERENCES patient_diagnoses(diagnosis_id)
-        ON DELETE SET NULL
+        ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 
--- ==========================================
--- 9. PATIENT MUTATIONS TABLE
--- ==========================================
+-- sample_diagnoses: optional association between a sample and one diagnosis
+-- No row means the sample has no associated diagnosis.
+CREATE TABLE sample_diagnoses (
+    sample_id     INT UNSIGNED PRIMARY KEY,
+    diagnosis_id  INT UNSIGNED NOT NULL,
+    CONSTRAINT fk_sample_diagnoses_sample
+        FOREIGN KEY (sample_id) REFERENCES samples(sample_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_sample_diagnoses_diagnosis
+        FOREIGN KEY (diagnosis_id) REFERENCES patient_diagnoses(diagnosis_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB;
 
+
+-- patient_mutations: mutations found in a sample (many-to-many link)
 CREATE TABLE patient_mutations (
     sample_id         INT UNSIGNED NOT NULL,
     mutation_id       INT UNSIGNED NOT NULL,
     allele_frequency  DECIMAL(5,4) NULL,
-
     PRIMARY KEY (sample_id, mutation_id),
 
     CONSTRAINT chk_allele_frequency
@@ -194,43 +202,7 @@ CREATE TABLE patient_mutations (
 ) ENGINE=InnoDB;
 
 
--- ==========================================
--- 10. MUTATION-CANCER ASSOCIATIONS TABLE
--- ==========================================
-
-CREATE TABLE mutation_cancer_associations (
-    association_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    mutation_id INT UNSIGNED NOT NULL,
-    cancer_type_id INT UNSIGNED NOT NULL,
-    evidence_source VARCHAR(255) NULL,
-    association_strength DECIMAL(5,4) NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE KEY uq_mutation_cancer (
-        mutation_id,
-        cancer_type_id
-    ),
-
-    CONSTRAINT chk_association_strength
-        CHECK (
-            association_strength IS NULL
-            OR association_strength BETWEEN 0 AND 1
-        ),
-
-    CONSTRAINT fk_mca_mutation
-        FOREIGN KEY (mutation_id) REFERENCES mutations(mutation_id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT fk_mca_cancer_type
-        FOREIGN KEY (cancer_type_id) REFERENCES cancer_types(cancer_type_id)
-        ON DELETE CASCADE
-) ENGINE=InnoDB;
-
-
--- ==========================================
--- 11. PREDICTIONS TABLE
--- ==========================================
-
+-- predictions table: one row per model run
 CREATE TABLE predictions (
     prediction_id  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     patient_id     INT UNSIGNED NULL,
@@ -247,15 +219,33 @@ CREATE TABLE predictions (
 ) ENGINE=InnoDB;
 
 
--- ==========================================
--- 12. PREDICTION RESULTS TABLE
--- ==========================================
+-- prediction_mutations: mutations used in each prediction
+CREATE TABLE prediction_mutations (
+    prediction_id     INT UNSIGNED NOT NULL,
+    mutation_id       INT UNSIGNED NOT NULL,
+    allele_frequency  DECIMAL(5,4) NULL,
+    PRIMARY KEY (prediction_id, mutation_id),
+    CONSTRAINT chk_prediction_allele_frequency
+       CHECK (
+        allele_frequency IS NULL
+        OR allele_frequency BETWEEN 0 AND 1
+       ),
+    CONSTRAINT fk_pred_mut_prediction
+        FOREIGN KEY (prediction_id)
+        REFERENCES predictions(prediction_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_pred_mut_mutation
+        FOREIGN KEY (mutation_id)
+        REFERENCES mutations(mutation_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB;
 
+
+-- prediction_results: probability of each cancer type for a prediction run
 CREATE TABLE prediction_results (
     prediction_id           INT UNSIGNED NOT NULL,
     cancer_type_id          INT UNSIGNED NOT NULL,
     prediction_probability  DECIMAL(5,4) NOT NULL,
-
     PRIMARY KEY (prediction_id, cancer_type_id),
 
     CONSTRAINT chk_pred_probability
@@ -270,10 +260,7 @@ CREATE TABLE prediction_results (
 ) ENGINE=InnoDB;
 
 
--- ==========================================
--- 13. FEEDBACK TABLE
--- ==========================================
-
+-- feedback: user feedback on a prediction run
 CREATE TABLE feedback (
     feedback_id      INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     prediction_id    INT UNSIGNED NOT NULL,
@@ -294,10 +281,7 @@ CREATE TABLE feedback (
 ) ENGINE=InnoDB;
 
 
--- ==========================================
--- 14. AUDIT LOGS TABLE
--- ==========================================
-
+-- audit_logs table: audit trail of actions
 CREATE TABLE audit_logs (
     log_id       BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id      INT UNSIGNED NULL,
