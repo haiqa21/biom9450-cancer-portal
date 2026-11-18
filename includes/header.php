@@ -62,6 +62,8 @@ $pageScripts = $pageScripts ?? [];
 $navItems = [
     'patient' => [
         ['patient-dashboard', 'My results', 'user'],
+        ['doctors', 'Find a doctor', 'stethoscope'],
+        ['records', 'My records', 'file'],
     ],
     'oncologist' => [
         ['oncologist-dashboard', 'Dashboard', 'home'],
@@ -82,6 +84,8 @@ $icons = [
     'target' => '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
     'chart'  => '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     'logout' => '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3"/>',
+    'stethoscope' => '<path d="M6 3v6a4 4 0 0 0 8 0V3"/><path d="M4 3h4M12 3h4"/><path d="M10 13v2a5 5 0 0 0 10 0v-2"/><circle cx="20" cy="11" r="2"/>',
+'file'        => '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8 13h8M8 17h8"/>',
 ];
 $icon = function (string $name) use ($icons): string {
     return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" '
