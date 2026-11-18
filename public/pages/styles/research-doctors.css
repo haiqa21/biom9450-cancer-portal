@@ -1,0 +1,22 @@
+/*
+ * Styles used only by research-doctors.php.
+ * Shared pieces (cards, tables, filters, pager, chart slot, sortable headers)
+ * are in app.css.
+ */
+
+/* Small explanatory line under the accuracy chart */
+.chart-note {
+    margin-top: 10px;
+}
+
+/* The two percentage columns have long headers; let those headers wrap onto
+   two lines instead of making the table very wide */
+.doctors-table th:nth-child(n+7) {
+    white-space: normal;
+    min-width: 120px;
+}
+
+/* Name search a bit wider than the default field */
+.filters input#q {
+    width: 200px;
+}
