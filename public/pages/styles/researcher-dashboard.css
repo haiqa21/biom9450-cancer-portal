@@ -1,12 +1,6 @@
 
-/* Gene symbols are italic by convention */
-.gene {
-    font-style: italic;
-    font-weight: 600;
-    color: var(--text-heading);
-}
 
-/* Status chips, .cancer-name, .tile-link, .chart-slot and .visually-hidden
+/* .gene, status chips, .cancer-name, .tile-link, .chart-slot and .visually-hidden
    moved to app.css: the doctor pages use them too. */
 
 

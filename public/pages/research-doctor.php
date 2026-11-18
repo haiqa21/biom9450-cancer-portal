@@ -191,7 +191,7 @@ require __DIR__ . '/../../includes/header.php';
                      Empty state: <tr><td colspan="8" class="empty">No consenting patients yet.</td></tr> -->
                 <?php for ($i = 0; $i < 4; $i++): ?>
                 <tr>
-                    <td><a class="row-link" href="research-patient.php?id=0">Patient —</a></td>
+                    <td><a class="row-link" href="research-patient.php?id=1&amp;doctor=<?= $doctorId ?>">Patient —</a></td>
                     <td class="num">—</td>
                     <td>—</td>
                     <td>—</td>
@@ -263,7 +263,7 @@ require __DIR__ . '/../../includes/header.php';
                 <?php foreach (['agree', 'disagree', 'partly'] as $placeholderAgreement): ?>
                 <tr>
                     <td>—</td>
-                    <td><a class="row-link" href="research-patient.php?id=0">Patient —</a></td>
+                    <td><a class="row-link" href="research-patient.php?id=1&amp;doctor=<?= $doctorId ?>">Patient —</a></td>
                     <td>—</td>
                     <td>— <span class="muted">(—%)</span></td>
                     <td>—</td>

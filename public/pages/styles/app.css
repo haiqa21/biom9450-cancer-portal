@@ -568,3 +568,10 @@ td.empty {
     align-items: flex-start;
     gap: 12px;
 }
+
+/* Gene symbols are italic by convention (used by the dashboard and patient record) */
+.gene {
+    font-style: italic;
+    font-weight: 600;
+    color: var(--text-heading);
+}

@@ -319,7 +319,7 @@ require __DIR__ . '/../../includes/header.php';
                 <?php for ($i = 0; $i < 3; $i++): ?>
                 <tr>
                     <td class="num">—</td>
-                    <td><a class="row-link" href="research-patient.php?id=0">Patient —</a></td>
+                    <td><a class="row-link" href="research-patient.php?id=1">Patient —</a></td>
                     <td><a href="research-doctor.php?id=0">Dr —</a></td>
                     <!-- event is either "Reviewed" or "Report released" -->
                     <td><span class="chip status-<?= $i === 1 ? 'released' : 'reviewed' ?>"><?= $i === 1 ? 'Report released' : 'Reviewed' ?></span></td>
@@ -378,7 +378,7 @@ require __DIR__ . '/../../includes/header.php';
                      Empty state: <tr><td colspan="8" class="empty">No patients match these filters.</td></tr> -->
                 <?php for ($i = 0; $i < 4; $i++): ?>
                 <tr>
-                    <td><a class="row-link" href="research-patient.php?id=0">Patient —</a></td>
+                    <td><a class="row-link" href="research-patient.php?id=1">Patient —</a></td>
                     <td class="num">—</td>
                     <td>—</td>
                     <td>—</td>
@@ -481,7 +481,7 @@ require __DIR__ . '/../../includes/header.php';
                             <td><span class="gene">—</span></td>
                             <td>—</td>
                             <td class="num">—</td>
-                            <td><a href="research-patient.php?id=0">Patient —</a></td>
+                            <td><a href="research-patient.php?id=1">Patient —</a></td>
                         </tr>
                         <?php endfor; ?>
                     </tbody>
@@ -510,7 +510,7 @@ require __DIR__ . '/../../includes/header.php';
             <ul class="people">
                 <!-- TODO: other patients with this exact mutation, first 8 -->
                 <li>
-                    <a href="research-patient.php?id=0">Patient —</a>
+                    <a href="research-patient.php?id=1">Patient —</a>
                     <span class="muted small-text">— · —</span>
                     <span class="chip">—</span>
                 </li>
@@ -520,7 +520,7 @@ require __DIR__ . '/../../includes/header.php';
             <ul class="people">
                 <!-- TODO: other patients with any mutation in this gene, first 8 -->
                 <li>
-                    <a href="research-patient.php?id=0">Patient —</a>
+                    <a href="research-patient.php?id=1">Patient —</a>
                     <span class="muted small-text">— · —</span>
                     <span class="chip">—</span>
                 </li>

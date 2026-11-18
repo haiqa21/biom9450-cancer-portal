@@ -82,3 +82,12 @@ function hidden_query_inputs(array $except): string
     }
     return $html;
 }
+
+/** 2026-03-14 -> Mar 2026. Researcher pages show month + year only, never a full date. */
+function format_month(?string $date): string
+{
+    if (!$date) {
+        return '';
+    }
+    return date('M Y', strtotime($date));
+}
