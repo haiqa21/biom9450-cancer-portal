@@ -91,3 +91,54 @@ function format_month(?string $date): string
     }
     return date('M Y', strtotime($date));
 }
+
+/*
+ * Fixed lists shared by the researcher pages, so every page uses the same
+ * order and the same labels. Keys are the values stored in the database.
+ */
+
+/** The six cancer types in the one order every chart and legend uses (colours: --cancer-* in app.css). */
+const CANCER_TYPES = ['Breast', 'Brain', 'Liver', 'Prostate', 'Blood', 'Pancreas'];
+
+/** predictions.status => label, in workflow order (chip colours: .status-* in app.css). */
+const PREDICTION_STATUSES = [
+    'awaiting_diagnosis' => 'Awaiting diagnosis',
+    'pending_review'     => 'Pending review',
+    'reviewed'           => 'Reviewed',
+    'report_draft'       => 'Report draft',
+    'released'           => 'Released',
+];
+
+/** feedback.agreement => label: how a doctor or researcher rated the model (chip colours: .agreement-* in app.css). */
+const AGREEMENT_OPTIONS = [
+    'agree'    => 'Agree',
+    'partly'   => 'Partly agree',
+    'disagree' => 'Disagree',
+];
+
+/**
+ * The session's CSRF token, created on first use. Every POST form includes it
+ * as a hidden field and the handler compares it with hash_equals(), so another
+ * site can't submit the form on a signed-in user's behalf.
+ */
+function csrf_token(): string
+{
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+/** Reasons a reviewer can give for flagging a sample's data quality (feedback.data_quality_note). */
+const DATA_QUALITY_REASONS = [
+    'low_quality'   => 'Low sample quality',
+    'few_mutations' => 'Too few mutations',
+    'contamination' => 'Possible contamination',
+    'other'         => 'Other',
+];
+
+/** Longest feedback comment accepted, in characters (the form's counter uses the same number). */
+const FEEDBACK_COMMENT_MAX = 2000;

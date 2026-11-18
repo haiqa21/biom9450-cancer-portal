@@ -70,10 +70,13 @@ $navItems = [
         ['new-patient', 'New patient', 'plus'],
         ['prediction', 'Predictions', 'target'],
     ],
+    // Researchers read de-identified data and give feedback
     'researcher' => [
-        ['researcher-dashboard', 'Dashboard', 'chart'],
-        ['new-patient', 'New patient', 'plus'],
-        ['prediction', 'Predictions', 'target'],
+        ['researcher-dashboard', 'Dashboard', 'home'],
+        ['research-doctors', 'Doctors', 'stethoscope'],
+        ['research-predictions', 'Predictions', 'target'],
+        ['model-performance', 'Model performance', 'chart'],
+        ['my-feedback', 'My feedback', 'file'],
     ],
 ][$currentUser['role']] ?? [];
 
