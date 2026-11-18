@@ -2,6 +2,7 @@ config/config.php
 uploads/
 .env
 __pycache__
+ml/TCGA_2000_matched_profiles
 
 public/pages/template.html
 public/pages/styles/test.css
