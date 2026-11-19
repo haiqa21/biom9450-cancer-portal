@@ -1,3 +1,4 @@
+
 <?php
 // Mutation explorer shared by the oncologist and researcher dashboards.
 // Needs: $mutations, $mutationTotal, $mutationPage, $filters, $options, $related, $selectedMutation, $selectedPatient
@@ -7,7 +8,9 @@ $relatedList = function (array $people) {
     if (!$people) {
         return '<p class="muted">No other patients.</p>';
     }
+
     $html = '<ul class="people">';
+
     foreach (array_slice($people, 0, 8) as $p) {
         $html .= '<li><a href="patient-detail.php?id=' . e($p['patient_id']) . '">' . e($p['first_name'] . ' ' . $p['last_name']) . '</a>'
                . '<span class="muted small-text">ID ' . e($p['patient_id']) . ' · ' . e(age_from_birthdate($p['birthdate'])) . ' · ' . e(ucfirst($p['sex'])) . '</span>'
@@ -39,6 +42,7 @@ $variantName = function (array $m): string {
     </div>
 
     <form class="filters explorer-filters" method="get" action="#explorer-heading">
+
         <?php foreach (['q', 'cancer', 'ppage'] as $keep): ?>
             <?php if (isset($_GET[$keep]) && $_GET[$keep] !== ''): ?>
             <input type="hidden" name="<?= e($keep) ?>" value="<?= e($_GET[$keep]) ?>">
@@ -72,15 +76,21 @@ $variantName = function (array $m): string {
                 <?php endforeach; ?>
             </datalist>
         </div>
+
         <div class="field">
             <label for="from">Position from</label>
             <input id="from" name="from" inputmode="numeric" value="<?= e($filters['from']) ?>" placeholder="7570000">
         </div>
+
         <div class="field">
             <label for="to">to</label>
             <input id="to" name="to" inputmode="numeric" value="<?= e($filters['to']) ?>" placeholder="7590000">
         </div>
+
+        <div class="field">
+            <label for="type">Mutation type</label>
             <select id="type" name="type">
+                <option value="">Any</option>
                 <?php foreach ($options['types'] as $t): ?>
                 <option value="<?= e($t) ?>" <?= $t === $filters['type'] ? 'selected' : '' ?>>
                     <?= e(ucfirst($t)) ?>
@@ -176,6 +186,7 @@ $variantName = function (array $m): string {
                     <?php if ($mutationPage > 1): ?>
                     <a class="btn" href="<?= e(url_with(['mpage' => $mutationPage - 1])) ?>#explorer-heading">Previous</a>
                     <?php endif; ?>
+
                     <?php if ($mutationPage < $mutationPages): ?>
                     <a class="btn" href="<?= e(url_with(['mpage' => $mutationPage + 1])) ?>#explorer-heading">Next</a>
                     <?php endif; ?>
@@ -186,6 +197,7 @@ $variantName = function (array $m): string {
         <?php if ($related): ?>
         <aside class="related" aria-label="Related patients">
             <h3 class="mono"><?= e($variantName($related['mutation'])) ?></h3>
+
             <p class="muted small-text">
                 <?= is_named_gene($related['mutation']['gene_symbol']) ? '<em>' . e($related['mutation']['gene_symbol']) . '</em>' : e($related['mutation']['gene_symbol']) ?>
                 · <?= e($related['mutation']['mutation_type']) ?>
