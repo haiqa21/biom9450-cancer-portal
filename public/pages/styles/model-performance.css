@@ -1,0 +1,55 @@
+
+
+/* Charts that sit above their own table need less height than the default slot */
+.chart-short {
+    min-height: 140px;
+    margin-bottom: 14px;
+}
+
+/* Labelled box filling an empty chart slot, so it doesn't read as missing
+   content. The chart script replaces the slot's contents, removing it. */
+.chart-placeholder {
+    height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+}
+
+/* ---------- confusion matrix fallback ---------- */
+
+/* Equal-width count cells, centred, so it reads as a grid */
+.confusion-table th[scope="col"],
+.confusion-table td {
+    text-align: center;
+}
+
+.confusion-table th[scope="row"] {
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-heading);
+}
+
+.confusion-table td a {
+    display: block;
+    color: var(--text-heading);
+    text-decoration: none;
+}
+
+.confusion-table td a:hover { color: var(--primary); text-decoration: underline; }
+
+/* Correct calls (final type = model's call) are outlined so they stand out */
+.confusion-table td.diagonal {
+    background: var(--primary-soft);
+    font-weight: 700;
+    box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+/* Row headers are <th>, so keep the hover tint off them */
+.confusion-table tbody tr:hover th { background: transparent; }

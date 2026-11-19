@@ -1,0 +1,228 @@
+
+/* ---------- 1. header ---------- */
+
+.prediction-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.heading-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* ---------- 2. stage cards ---------- */
+
+/* Four equal cards in a row; auto-fit drops them to 2 then 1 per row on
+   narrow screens without a media query */
+.stages {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px;
+}
+
+.stage {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    min-width: 0;
+}
+
+/* Small uppercase step label: "1 · Initial diagnosis" */
+.stage-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* The stage's answer, e.g. the cancer type */
+.stage-main {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-heading);
+}
+
+.stage-details {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.stage-details div { display: flex; flex-direction: column; }
+.stage-details dt { color: var(--text-muted); font-size: 12px; }
+.stage-details dd { margin: 0; overflow-wrap: anywhere; }
+
+/* A stage not reached yet: dashed and quiet */
+.stage-pending {
+    background: var(--surface-alt);
+    border-style: dashed;
+}
+
+.stage-pending .stage-main { color: var(--text-muted); }
+
+/* ---------- 5. feedback ---------- */
+
+.agreement-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.summary-bar {
+    height: 14px;
+    border-radius: 4px;
+    background: var(--surface-alt);
+}
+
+.summary-counts {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+.feedback-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.feedback-entry {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    border: 1px solid var(--grid);
+    border-radius: 10px;
+}
+
+.feedback-meta { font-size: 14px; }
+
+.feedback-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.feedback-comment {
+    font-size: 14px;
+    color: var(--text-body);
+    white-space: pre-line;   /* keep line breaks the author typed */
+}
+
+/* ---------- 6. my feedback form ---------- */
+
+.feedback-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 640px;
+}
+
+.form-group {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-group legend {
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+.required { color: var(--impact-high); }
+
+/* Radio and checkbox options: a row of large, easy-to-hit labels */
+.choice-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+}
+
+.choice {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.choice input { accent-color: var(--primary); margin: 0; }
+
+.feedback-form .field select { max-width: 280px; }
+
+.feedback-form textarea {
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    resize: vertical;
+}
+
+.feedback-form textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(14, 110, 140, 0.15);
+}
+
+.hint {
+    font-size: 12.5px;
+    color: var(--text-muted);
+}
+
+/* Comment counter sits under the box on the right; red past the limit */
+.counter { align-self: flex-end; }
+.counter.over { color: var(--impact-high); font-weight: 600; }
+
+/* ---------- messages ---------- */
+
+.flash {
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--success-bg);
+    color: var(--success);
+    font-size: 14px;
+}
+
+.error-summary {
+    margin-bottom: 14px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--impact-high-bg);
+    color: var(--impact-high);
+    font-size: 14px;
+}
+
+.error-summary p,
+.error-summary a { color: var(--impact-high); }
+.error-summary ul { margin: 6px 0 0; padding-left: 18px; }
+
+.field-error {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--impact-high);
+}

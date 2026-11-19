@@ -1,0 +1,49 @@
+/*
+
+/* ---------- quick tabs ---------- */
+
+/* A row of links with an underline under the current one */
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+}
+
+.tab {
+    padding: 10px 14px;
+    margin-bottom: -1px;               /* sit the active underline on the border */
+    border-bottom: 2px solid transparent;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.tab:hover { color: var(--text-heading); }
+
+.tab.active {
+    border-bottom-color: var(--primary);
+    color: var(--primary);
+    font-weight: 600;
+}
+
+/* ---------- invalid-filter notice ---------- */
+
+.filter-notice {
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 13px;
+}
+
+/* ---------- summary strip ---------- */
+
+/* Three tiles, a little smaller than the dashboard's */
+.summary-tiles .tile-value { font-size: 22px; }
+
+/* ---------- agree tick / cross ---------- */
+
+.mark-yes { color: var(--success); font-weight: 700; }
+.mark-no  { color: var(--impact-high); font-weight: 700; }

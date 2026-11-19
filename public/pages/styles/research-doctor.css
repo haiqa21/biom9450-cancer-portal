@@ -1,0 +1,60 @@
+
+
+/* ---------- 1. profile ---------- */
+
+.profile {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Role chip and the facts about the doctor on one wrapping line */
+.profile-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+/* ---------- 3. how they rated the model ---------- */
+
+/* This chart is a single bar, so it needs far less height than the default slot */
+.agreement-slot {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* Empty track for now; with data it holds one segment per answer */
+.agreement-bar {
+    height: 20px;
+    border-radius: 6px;
+    background: var(--surface-alt);
+}
+
+/* Agree / Partly agree / Disagree with their counts, side by side */
+.agreement-counts {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 24px;
+}
+
+.agreement-counts li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+/* ---------- 5. review history ---------- */
+
+.review-filters {
+    margin-bottom: 14px;
+}

@@ -1,0 +1,104 @@
+
+
+/* ---------- 1. header ---------- */
+
+.patient-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.patient-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* ---------- 2. care team ---------- */
+
+.care-team {
+    font-size: 14px;
+}
+
+/* ---------- 3. journey fallback ---------- */
+
+/* One row per event: day | event | detail, with a line down the left
+   so it reads as a timeline even before the chart exists */
+.journey-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 14px;
+    border-left: 2px solid var(--grid);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 14px;
+}
+
+.journey-list li {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: baseline;
+}
+
+.journey-day {
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+/* ---------- 5. mutations by impact ---------- */
+
+/* This chart is four short bars, so it needs less height than the default slot */
+#chart-patient-impact {
+    min-height: 0;
+}
+
+/* impact chip | bar track | count */
+.impact-bars {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.impact-bars li {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr) 36px;
+    gap: 10px;
+    align-items: center;
+}
+
+.impact-bars a { text-decoration: none; }
+
+/* Empty grey track for now; with data, an inner bar in the impact colour */
+.impact-track {
+    height: 14px;
+    border-radius: 4px;
+    background: var(--surface-alt);
+}
+
+.impact-count {
+    text-align: right;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+/* ---------- 6. mutations table ---------- */
+
+.mutation-filters {
+    margin-bottom: 14px;
+}
+
+/* Reference allele quiet, new allele bold: "C → T" */
+.change .ref { color: var(--text-muted); }
+.change .alt { color: var(--text-heading); font-weight: 600; }
+
+/* ---------- small screens ---------- */
+
+@media (max-width: 600px) {
+    .journey-list li { grid-template-columns: 64px minmax(0, 1fr); }
+    .journey-list li > :last-child { grid-column: 2; }
+}
