@@ -129,7 +129,7 @@ require __DIR__ . '/../../includes/header.php';
     <div>
         <h1>Predictions</h1>
         <!-- TODO: COUNT(*) of rows matching the tab and filters -->
-        <p><span class="num">—</span> matching</p>
+        <p><span class="num">—</span> matches</p>
     </div>
 </div>
 

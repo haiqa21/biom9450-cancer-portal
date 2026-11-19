@@ -150,7 +150,7 @@ require __DIR__ . '/../../includes/header.php';
     <!-- 3. Workflow pipeline: how many predictions sit at each status -->
     <section class="card" aria-labelledby="pipeline-heading">
         <div class="card-header">
-            <h2 id="pipeline-heading">Where predictions are</h2>
+            <h2 id="pipeline-heading">Prediction Timeline</h2>
         </div>
 
         <div id="chart-pipeline" class="chart-slot" role="img"
@@ -180,7 +180,7 @@ require __DIR__ . '/../../includes/header.php';
     <!-- 4. Diagnosis accuracy by cancer type for consenting released reports only. -->
     <section class="card" aria-labelledby="accuracy-heading">
         <div class="card-header">
-            <h2 id="accuracy-heading">Matched the final report</h2>
+            <h2 id="accuracy-heading">Prediction Report Agreeance</h2>
             <span class="muted small-text">Released reports only</span>
         </div>
 
@@ -231,7 +231,6 @@ require __DIR__ . '/../../includes/header.php';
 <section class="card" aria-labelledby="genes-heading">
     <div class="card-header">
         <h2 id="genes-heading">Mutations in selected genes</h2>
-        <span class="muted small-text">Patients with at least one mutation in each gene</span>
     </div>
 
     <form method="get" action="#genes-heading">

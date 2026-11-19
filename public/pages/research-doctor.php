@@ -133,8 +133,7 @@ require __DIR__ . '/../../includes/header.php';
      =================================================================== -->
 <section class="card" aria-labelledby="agreement-heading">
     <div class="card-header">
-        <h2 id="agreement-heading">How they rated the model</h2>
-        <span class="muted small-text">Across all their reviews</span>
+        <h2 id="agreement-heading">Oncologist Model Rating</h2>
     </div>
 
     <div id="chart-doctor-agreement" class="chart-slot agreement-slot" role="img"

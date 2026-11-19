@@ -56,7 +56,6 @@ require __DIR__ . '/../../includes/header.php';
 <div class="page-header">
     <div>
         <h1>Model performance</h1>
-        <p>Measured against released reports only</p>
     </div>
 </div>
 
@@ -126,7 +125,7 @@ require __DIR__ . '/../../includes/header.php';
      =================================================================== -->
 <section class="card" aria-labelledby="confusion-heading">
     <div class="card-header">
-        <h2 id="confusion-heading">What the model called each final diagnosis</h2>
+        <h2 id="confusion-heading">Model Diagnosis Accuracy</h2>
         <span class="muted small-text">Rows: final report · Columns: model's call</span>
     </div>
 
@@ -261,7 +260,7 @@ require __DIR__ . '/../../includes/header.php';
 
     <section class="card" aria-labelledby="calibration-heading">
         <div class="card-header">
-            <h2 id="calibration-heading">Is a confident model right more often?</h2>
+            <h2 id="calibration-heading">Confidence Summary</h2>
         </div>
         <!-- Bars by confidence band showing % correct, with a diagonal where a
              perfectly calibrated model would sit. Bands with fewer than 5

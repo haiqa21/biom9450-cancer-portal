@@ -42,7 +42,6 @@ require __DIR__ . '/../../includes/header.php';
 <div class="page-header">
     <div>
         <h1>My feedback</h1>
-        <p>Everything you've submitted, newest first</p>
     </div>
 </div>
 
@@ -63,7 +62,6 @@ require __DIR__ . '/../../includes/header.php';
     <div class="tile">
         <span class="tile-value">—</span>
         <span class="tile-label">Matched the final report</span>
-        <span class="muted small-text">where you picked a type and the report is released</span>
     </div>
     <div class="tile">
         <span class="tile-value">—</span>
