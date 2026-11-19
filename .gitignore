@@ -2,6 +2,9 @@ config/config.php
 uploads/
 .env
 __pycache__
+ml/TCGA_2000_matched_profiles/
+ml/__MACOSX/
+.DS_Store
 
 public/pages/template.html
 public/pages/styles/test.css

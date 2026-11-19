@@ -483,7 +483,6 @@ td.empty {
 .pager .btn { height: 34px; }
 
 /* ---------- shared by the researcher pages ---------- */
-/* Moved here from researcher-dashboard.css once the doctor pages needed them. */
 
 /* Text for screen readers only, e.g. the header of a column of "Compare" links */
 .visually-hidden {
