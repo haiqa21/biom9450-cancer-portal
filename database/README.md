@@ -22,7 +22,6 @@ someone who has.
    |---|---|
    | `01_tcga_data.sql` | demo staff, 33 cancer types, genes, mutations, patients, diagnoses, samples |
    | `02_predictions.sql` | 2 predictions per patient (mutation-v1, expression-v2) with all 33 probabilities |
-   | `03_demo_reviews.sql` | **synthetic** feedback so the pages have something to show (optional) |
    | `import_map.csv` | ids used by `predict_all.py` |
 
 ## Load it into MySQL (XAMPP)
@@ -33,7 +32,6 @@ From the repository folder, in a terminal (XAMPP's MySQL must be running):
 C:\xampp\mysql\bin\mysql -u root < database\schema.sql
 C:\xampp\mysql\bin\mysql -u root < database\generated\01_tcga_data.sql
 C:\xampp\mysql\bin\mysql -u root < database\generated\02_predictions.sql
-C:\xampp\mysql\bin\mysql -u root < database\generated\03_demo_reviews.sql
 ```
 
 `schema.sql` drops and recreates the database, so this also resets it. The files are too
@@ -50,13 +48,18 @@ All demo accounts use the password **CancerInsight1!** (choose the matching role
 
 ## What is real and what is synthetic
 
-The dataset has no clinical table, but the schema needs some clinical fields:
+The dataset has no clinical table and no staff, but the schema requires some of those fields.
 
-- **From the dataset:** cancer type, the TCGA sample code, every mutation (GRCh37), allele frequencies.
-- **From the team's models (`ml/train.py`):** predictions and probabilities. Each patient is
-  predicted by a model that never saw them during training (5-fold cross-validation).
-- **Synthetic:** patient names and birthdates, diagnosis dates, the staff accounts, which
-  oncologist looks after which patient, and the feedback in `03_demo_reviews.sql`.
-  Sex, country and stage are left as *unknown*.
+- **From the dataset:** each patient's cancer type, the TCGA sample code, the 33 cancer types
+  and their full names, every gene and mutation (GRCh37), allele frequencies.
+- **From the team's models (`ml/train.py`):** predictions and all 33 probabilities. Each patient
+  is predicted by a model that never saw them during training (5-fold cross-validation).
+  `created_at` is the real time each model was run.
+- **Synthetic people** (required by the schema, not in the dataset):
+  - patients: first and last name, birthdate, date of diagnosis
+  - the 12 oncologist and 3 researcher accounts, and which oncologist looks after which patient
+- **Left as unknown placeholders:** sex, country, stage. Status is the schema default, `active`.
+- **Empty until people use the portal:** feedback (and so every review status starts as
+  "Awaiting review").
 
 The build scripts' docstrings list every place the data didn't fit the schema and how it was handled.
