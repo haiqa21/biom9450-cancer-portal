@@ -7,7 +7,7 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $email = trim($_POST['email'] ?? '');
-    $password = $_POST['password_hash'] ?? '';
+    $password = $_POST['password'] ?? '';   // the form field is called "password"
     $role = $_POST['role'] ?? '';
 
     // Find the user based on their selected role
@@ -34,8 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = $stmt ? $stmt->fetch() : false;
 
     // Check whether the user exists and their password is correct
-    if ($user && password_verify($password, $user['password'])) {
+    if ($user && password_verify($password, $user['password_hash'])) {
 
+        session_regenerate_id(true);   // new session id on sign-in, so an old one can't be reused
         $_SESSION['user_id'] = $user['user_id'];
         $_SESSION['role'] = $user['role'];
 
@@ -146,4 +147,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             });
         </script>
     </body>
-</html>
+</html>

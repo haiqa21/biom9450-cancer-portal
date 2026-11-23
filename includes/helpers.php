@@ -26,13 +26,20 @@ function age_from_birthdate(string $birthdate): int
  * Group a mutation_type into an impact level, used for the coloured chips.
  * high: likely to disrupt the protein; moderate: changes the protein;
  * low: unlikely to change the protein; modifier: outside the coding sequence.
+ *
+ * Accepts both the TCGA/MAF Variant_Classification values stored by the import
+ * (Missense_Mutation, Frame_Shift_Del, 3'UTR ...) and the older lowercase names
+ * used by the placeholder data (missense, frameshift ...).
  */
 function mutation_impact(string $type): string
 {
-    $type = strtolower($type);
-    $high = ['nonsense', 'frameshift', 'splice acceptor', 'splice donor', 'start lost', 'stop lost'];
-    $moderate = ['missense', 'inframe deletion', 'inframe insertion'];
-    $low = ['synonymous', 'splice region', "5' utr start gain"];
+    $type = strtolower(str_replace('_', ' ', $type));
+    $high = ['nonsense', 'nonsense mutation', 'frameshift', 'frame shift del', 'frame shift ins',
+             'splice site', 'splice acceptor', 'splice donor', 'translation start site',
+             'nonstop mutation', 'start lost', 'stop lost'];
+    $moderate = ['missense', 'missense mutation', 'in frame del', 'in frame ins',
+                 'inframe deletion', 'inframe insertion'];
+    $low = ['silent', 'synonymous', 'splice region', "5' utr start gain"];
 
     if (in_array($type, $high, true)) {
         return 'high';
@@ -43,13 +50,27 @@ function mutation_impact(string $type): string
     if (in_array($type, $low, true)) {
         return 'low';
     }
-    return 'modifier';
+    return 'modifier';     // 3'UTR, 5'UTR, Intron, RNA, flanking regions ...
 }
 
-/** True for HGNC symbols like TP53, false for Ensembl IDs used when no symbol is known. */
+/** Readable mutation type: Missense_Mutation -> Missense, Frame_Shift_Del -> Frameshift deletion. */
+function mutation_label(string $type): string
+{
+    $labels = [
+        'Missense_Mutation' => 'Missense', 'Nonsense_Mutation' => 'Nonsense', 'Nonstop_Mutation' => 'Nonstop',
+        'Frame_Shift_Del' => 'Frameshift deletion', 'Frame_Shift_Ins' => 'Frameshift insertion',
+        'In_Frame_Del' => 'In-frame deletion', 'In_Frame_Ins' => 'In-frame insertion',
+        'Splice_Site' => 'Splice site', 'Translation_Start_Site' => 'Start site', 'Silent' => 'Silent',
+        "3'UTR" => "3' UTR", "5'UTR" => "5' UTR", "3'Flank" => "3' flank", "5'Flank" => "5' flank",
+        'Intron' => 'Intron', 'RNA' => 'Non-coding RNA', 'IGR' => 'Intergenic',
+    ];
+    return $labels[$type] ?? ucfirst(str_replace('_', ' ', $type));
+}
+
+/** True for gene symbols like TP53; false for placeholders such as "?", "Unknown" or Ensembl IDs. */
 function is_named_gene(string $symbol): bool
 {
-    return strpos($symbol, 'ENSG') !== 0;
+    return $symbol !== '' && $symbol !== '?' && $symbol !== 'Unknown' && strpos($symbol, 'ENSG') !== 0;
 }
 
 /*
@@ -93,28 +114,9 @@ function format_month(?string $date): string
 }
 
 /*
- * Fixed lists shared by the researcher pages, so every page uses the same
- * order and the same labels. Keys are the values stored in the database.
+ * Lists used by the researcher pages (cancer types, review statuses, models) live in
+ * includes/research.php, because they come from the database.
  */
-
-/** The six cancer types in the one order every chart and legend uses (colours: --cancer-* in app.css). */
-const CANCER_TYPES = ['Breast', 'Brain', 'Liver', 'Prostate', 'Blood', 'Pancreas'];
-
-/** predictions.status => label, in workflow order (chip colours: .status-* in app.css). */
-const PREDICTION_STATUSES = [
-    'awaiting_diagnosis' => 'Awaiting diagnosis',
-    'pending_review'     => 'Pending review',
-    'reviewed'           => 'Reviewed',
-    'report_draft'       => 'Report draft',
-    'released'           => 'Released',
-];
-
-/** feedback.agreement => label: how a doctor or researcher rated the model (chip colours: .agreement-* in app.css). */
-const AGREEMENT_OPTIONS = [
-    'agree'    => 'Agree',
-    'partly'   => 'Partly agree',
-    'disagree' => 'Disagree',
-];
 
 /**
  * The session's CSRF token, created on first use. Every POST form includes it
@@ -131,14 +133,6 @@ function csrf_token(): string
     }
     return $_SESSION['csrf_token'];
 }
-
-/** Reasons a reviewer can give for flagging a sample's data quality (feedback.data_quality_note). */
-const DATA_QUALITY_REASONS = [
-    'low_quality'   => 'Low sample quality',
-    'few_mutations' => 'Too few mutations',
-    'contamination' => 'Possible contamination',
-    'other'         => 'Other',
-];
 
 /** Longest feedback comment accepted, in characters (the form's counter uses the same number). */
 const FEEDBACK_COMMENT_MAX = 2000;

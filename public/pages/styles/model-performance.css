@@ -53,3 +53,15 @@
 
 /* Row headers are <th>, so keep the hover tint off them */
 .confusion-table tbody tr:hover th { background: transparent; }
+
+/* "Most common mix-ups" sits under the confusion table in the same card */
+.mixups-heading { margin: 20px 0 8px; }
+
+/* 33 cancer types: let the list scroll inside the card instead of making it very tall */
+.type-table { max-height: 640px; overflow-y: auto; }
+
+/* Small "few cases" marker next to counts too small to trust */
+.chip.few { font-size: 11px; padding: 1px 6px; margin-left: 4px; }
+
+/* Calibration and feedback summary stacked in the right-hand column */
+.stacked-cards { display: flex; flex-direction: column; gap: 20px; min-width: 0; }

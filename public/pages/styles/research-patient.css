@@ -102,3 +102,11 @@
     .journey-list li { grid-template-columns: 64px minmax(0, 1fr); }
     .journey-list li > :last-child { grid-column: 2; }
 }
+
+/* The filled part of each impact bar, in that impact's colour */
+.impact-track { display: block; overflow: hidden; }
+.impact-fill { display: block; height: 100%; border-radius: 4px; }
+.impact-fill-high     { background: var(--impact-high); }
+.impact-fill-moderate { background: var(--impact-moderate); }
+.impact-fill-low      { background: var(--impact-low); }
+.impact-fill-modifier { background: var(--impact-modifier); }

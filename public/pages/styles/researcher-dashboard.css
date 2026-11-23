@@ -184,3 +184,22 @@
 @media (max-width: 1000px) {
     .explorer { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- 3. where predictions are ---------- */
+
+/* model name on the left; status chips with their counts on the right */
+.pipeline-counts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+}
+
+/* ---------- 7. latest prediction cell: chip + probability as one link ---------- */
+.prediction-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    color: inherit;
+}

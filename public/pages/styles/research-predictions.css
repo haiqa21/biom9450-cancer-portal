@@ -43,7 +43,4 @@
 /* Three tiles, a little smaller than the dashboard's */
 .summary-tiles .tile-value { font-size: 22px; }
 
-/* ---------- agree tick / cross ---------- */
-
-.mark-yes { color: var(--success); font-weight: 700; }
-.mark-no  { color: var(--impact-high); font-weight: 700; }
+/* tick / cross marks (.mark-yes, .mark-no) are shared and live in app.css */

@@ -184,6 +184,11 @@ a:hover { color: var(--primary-hover); }
 .nav-spacer { flex: 1; }
 
 .app-main {
+    /* relative: keeps absolutely positioned children (e.g. .visually-hidden headings) inside
+       this scrolling box. Without it they were placed against the whole page, made the page
+       taller than the window, and jumping to a #link after a filter scrolled the page itself:
+       the shell slid up and left an empty band at the bottom. */
+    position: relative;
     flex: 1;
     min-width: 0;
     overflow-y: auto;
@@ -573,4 +578,59 @@ td.empty {
     font-style: italic;
     font-weight: 600;
     color: var(--text-heading);
+}
+
+/* ---------- organ groups (researcher pages) ---------- */
+/* 33 TCGA cancer types can't each have a colour that people can tell apart, so
+   charts and dots colour by the 8 organ groups in includes/research.php, and the
+   cancer code is always printed beside the colour. The 8 hues are the dataviz
+   reference categorical palette, in its fixed order (largest group first). */
+:root {
+    --group-breast_gyn: #2a78d6;   /* blue */
+    --group-urinary:    #eb6834;   /* orange */
+    --group-digestive:  #1baf7a;   /* aqua */
+    --group-lung_hn:    #eda100;   /* yellow */
+    --group-endocrine:  #e87ba4;   /* magenta */
+    --group-brain:      #008300;   /* green */
+    --group-skin_eye:   #6250d6;   /* violet */
+    --group-blood:      #e34948;   /* red */
+    --group-other:      #5e6e7e;
+}
+
+.dot-group-breast_gyn, .seg-group-breast_gyn { background: var(--group-breast_gyn); }
+.dot-group-urinary,    .seg-group-urinary    { background: var(--group-urinary); }
+.dot-group-digestive,  .seg-group-digestive  { background: var(--group-digestive); }
+.dot-group-lung_hn,    .seg-group-lung_hn    { background: var(--group-lung_hn); }
+.dot-group-endocrine,  .seg-group-endocrine  { background: var(--group-endocrine); }
+.dot-group-brain,      .seg-group-brain      { background: var(--group-brain); }
+.dot-group-skin_eye,   .seg-group-skin_eye   { background: var(--group-skin_eye); }
+.dot-group-blood,      .seg-group-blood      { background: var(--group-blood); }
+.dot-group-other,      .seg-group-other      { background: var(--group-other); }
+
+/* Did the model's call match the recorded diagnosis: tick / cross (with hidden text) */
+.mark-yes { color: var(--success); font-weight: 700; }
+.mark-no  { color: var(--impact-high); font-weight: 700; }
+
+/* Ratings bar: one segment per rating 1-5, width = how many reviews gave it.
+   Red for 1-2, amber for 3, green for 4-5 (lighter for the lower of each pair);
+   the counts beside it always give the numbers, so colour is never the only signal. */
+.rating-bar {
+    display: flex;
+    gap: 2px;
+    overflow: hidden;
+}
+
+.rating-seg { display: block; height: 100%; }
+.rating-1 { background: var(--impact-high); }
+.rating-2 { background: var(--impact-high); opacity: 0.55; }
+.rating-3 { background: var(--warning); opacity: 0.7; }
+.rating-4 { background: var(--success); opacity: 0.6; }
+.rating-5 { background: var(--success); }
+
+/* Comments in tables wrap instead of widening the table */
+.comment-cell {
+    white-space: normal;
+    min-width: 180px;
+    max-width: 280px;
+    color: var(--text-body);
 }
