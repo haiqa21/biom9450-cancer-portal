@@ -9,3 +9,7 @@ ml/__MACOSX/
 public/pages/template.html
 public/pages/styles/test.css
 
+
+# Generated database contents (rebuilt by database/build/import_tcga.py and ml/predict_all.py;
+# about 75 MB, too big for the repository). See database/README.md.
+database/generated/
