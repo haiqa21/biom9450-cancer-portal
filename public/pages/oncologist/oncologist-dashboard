@@ -1,0 +1,1825 @@
+<?php
+session_start();
+
+require_once __DIR__ . '/../../includes/db.php';
+
+// Authentication
+if (
+    !isset($_SESSION['user_id'], $_SESSION['role']) ||
+    $_SESSION['role'] !== 'oncologist'
+) {
+    header('Location: ../login.php');
+    exit;
+}
+
+$user_id = (int) $_SESSION['user_id'];
+
+// Oncologist profile
+$stmt = $pdo->prepare("
+    SELECT first_name, last_name, institution, speciality
+    FROM professionals
+    WHERE user_id = ?
+    AND professional_type = 'oncologist'
+");
+$stmt->execute([$user_id]);
+$oncologist = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$oncologist) {
+    session_destroy();
+    header('Location: ../login.php');
+    exit;
+}
+
+// CSRF token
+if (empty($_SESSION['csrf'])) {
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
+}
+$csrf = $_SESSION['csrf'];
+
+// Helper functions
+function h($value) {
+    return htmlspecialchars(
+        (string) $value,
+        ENT_QUOTES,
+        'UTF-8'
+    );
+}
+
+function getAll(PDO $pdo, $sql, $args = []) {
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($args);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function getCount(PDO $pdo, $sql, $args = []) {
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($args);
+        return (int) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+// Patient directory
+$patients = getAll(
+    $pdo,
+    "SELECT patient_id, first_name, last_name,
+            birthdate, sex, country
+     FROM patients
+     ORDER BY last_name, first_name"
+);
+
+$patientCount = count($patients);
+
+// Tasks
+$tasks = getAll(
+    $pdo,
+    "SELECT t.*,
+            p.first_name AS pf,
+            p.last_name AS pl
+     FROM oncologist_tasks t
+     LEFT JOIN patients p
+        ON p.patient_id = t.patient_id
+     WHERE t.user_id = ?
+     ORDER BY
+        (t.task_status = 'pending') DESC,
+        t.due_date IS NULL,
+        t.due_date,
+        t.created_at DESC",
+    [$user_id]
+);
+
+// Reviews
+$reviews = getAll(
+    $pdo,
+    "SELECT r.*,
+            p.first_name AS pf,
+            p.last_name AS pl
+     FROM oncologist_reviews r
+     LEFT JOIN patients p
+        ON p.patient_id = r.patient_id
+     WHERE r.user_id = ?
+     ORDER BY
+        (r.review_status = 'pending') DESC,
+        r.created_at DESC",
+    [$user_id]
+);
+
+// Reports
+$reports = getAll(
+    $pdo,
+    "SELECT r.*,
+            p.first_name AS pf,
+            p.last_name AS pl
+     FROM oncologist_reports r
+     LEFT JOIN patients p
+        ON p.patient_id = r.patient_id
+     WHERE r.user_id = ?
+     ORDER BY r.created_at DESC",
+    [$user_id]
+);
+
+// Appointments
+$appointments = getAll(
+    $pdo,
+    "SELECT a.*,
+            p.first_name AS pf,
+            p.last_name AS pl
+     FROM oncologist_appointments a
+     LEFT JOIN patients p
+        ON p.patient_id = a.patient_id
+     WHERE a.user_id = ?
+       AND a.appointment_status = 'scheduled'
+     ORDER BY a.appointment_datetime",
+    [$user_id]
+);
+
+// Recent activity
+$activity = getAll(
+    $pdo,
+    "SELECT action, entity_type, details, created_at
+     FROM audit_logs
+     WHERE user_id = ?
+     ORDER BY created_at DESC
+     LIMIT 12",
+    [$user_id]
+);
+
+// Prediction metrics
+$predCount = getCount(
+    $pdo,
+    "SELECT COUNT(*)
+     FROM predictions
+     WHERE user_id = ?",
+    [$user_id]
+);
+
+// Task metrics
+$pendingTasks = count(
+    array_filter(
+        $tasks,
+        fn($task) => $task['task_status'] === 'pending'
+    )
+);
+
+// Review metrics
+$pendingReviews = count(
+    array_filter(
+        $reviews,
+        fn($review) => $review['review_status'] === 'pending'
+    )
+);
+
+// Report metrics
+$released = count(
+    array_filter(
+        $reports,
+        fn($report) => $report['report_status'] === 'released'
+    )
+);
+
+// TCGA metrics
+$tcgaCount = getCount(
+    $pdo,
+    "SELECT COUNT(*) FROM tcga_samples"
+);
+
+$passCount = getCount(
+    $pdo,
+    "SELECT COUNT(*)
+     FROM tcga_variants
+     WHERE filter_status = 'PASS'"
+);
+
+// Prediction analytics
+$predictionDist = getAll(
+    $pdo,
+    "SELECT
+        ct.cancer_type,
+        AVG(pr.prediction_probability) AS avg_probability,
+        COUNT(*) AS n
+     FROM prediction_results pr
+     JOIN cancer_types ct
+        ON ct.cancer_type_id = pr.cancer_type_id
+     JOIN predictions p
+        ON p.prediction_id = pr.prediction_id
+     WHERE p.user_id = ?
+     GROUP BY ct.cancer_type
+     ORDER BY n DESC
+     LIMIT 10",
+    [$user_id]
+);
+
+// TCGA endpoint
+$tcgaDataAvailable = file_exists(
+    __DIR__ . '/tcga-dashboard-data.php'
+);
+
+$fullName = $oncologist['first_name']
+    . ' '
+    . $oncologist['last_name'];
+
+$flash = $_SESSION['flash'] ?? '';
+unset($_SESSION['flash']);
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>CancerInsight | Oncologist Workspace</title>
+
+</head>
+
+<body>
+
+<header class="clinical-header">
+
+    <div class="brand">
+
+        <div class="brand-mark">C</div>
+
+        <div>
+            <h1>CancerInsight</h1>
+            <span>Clinical Intelligence</span>
+        </div>
+
+    </div>
+
+    <div class="header-actions">
+
+        <div class="doctor-profile">
+
+            <div class="doctor-avatar">
+                <?= h(strtoupper(substr($oncologist['first_name'], 0, 1))) ?>
+            </div>
+
+            <div class="doctor-info">
+
+                <strong>Dr. <?= h($fullName) ?></strong>
+
+                <span>
+                    <?= h($oncologist['speciality'] ?: 'Oncologist') ?>
+                </span>
+
+            </div>
+
+        </div>
+
+        <a class="logout-link" href="../logout.php">
+            Log out
+        </a>
+
+    </div>
+
+</header>
+
+
+<main class="clinical-dashboard">
+
+<section class="welcome-section">
+
+    <div>
+
+        <p class="eyebrow">CLINICAL WORKSPACE</p>
+
+        <h2>
+            Welcome back, Dr.
+            <?= h($oncologist['first_name']) ?>
+        </h2>
+
+        <p class="welcome-description">
+            Manage patient records, workflow, appointments
+            and genomic research insights.
+        </p>
+
+    </div>
+
+    <div class="welcome-date">
+
+        <span>Workspace</span>
+        <strong>CancerInsight</strong>
+
+    </div>
+
+</section>
+
+
+<?php if ($flash): ?>
+
+    <div class="ci-flash">
+        <?= h($flash) ?>
+    </div>
+
+<?php endif; ?>
+
+
+<!-- DASHBOARD SUMMARY -->
+
+<section class="summary-grid">
+
+    <article class="summary-card patients-card">
+
+        <div class="summary-top">
+            <span class="summary-label">Registered Patients</span>
+            <span class="summary-icon">♧</span>
+        </div>
+
+        <p class="summary-number">
+            <?= number_format($patientCount) ?>
+        </p>
+
+        <span class="summary-caption">
+            Patient records in database
+        </span>
+
+    </article>
+
+
+    <article class="summary-card predictions-card">
+
+        <div class="summary-top">
+            <span class="summary-label">My Predictions</span>
+            <span class="summary-icon">⌁</span>
+        </div>
+
+        <p class="summary-number">
+            <?= number_format($predCount) ?>
+        </p>
+
+        <span class="summary-caption">
+            Associated with your account
+        </span>
+
+    </article>
+
+
+    <article class="summary-card reviews-card">
+
+        <div class="summary-top">
+            <span class="summary-label">Pending Reviews</span>
+            <span class="summary-icon">◷</span>
+        </div>
+
+        <p class="summary-number">
+            <?= number_format($pendingReviews) ?>
+        </p>
+
+        <span class="summary-caption">
+            Your review queue
+        </span>
+
+    </article>
+
+
+    <article class="summary-card reports-card">
+
+        <div class="summary-top">
+            <span class="summary-label">Released Reports</span>
+            <span class="summary-icon">▤</span>
+        </div>
+
+        <p class="summary-number">
+            <?= number_format($released) ?>
+        </p>
+
+        <span class="summary-caption">
+            Released from your workspace
+        </span>
+
+    </article>
+
+</section>
+
+
+<!-- DASHBOARD NAVIGATION -->
+
+<nav class="ci-nav">
+
+    <a href="#tasks">My Tasks</a>
+    <a href="#patients">Patients</a>
+    <a href="#reviews">Reviews</a>
+    <a href="#reports">Reports</a>
+    <a href="#appointments">Appointments</a>
+    <a href="#activity">Activity</a>
+    <a href="#predictions">Predictions</a>
+    <a href="#tcga">TCGA</a>
+
+</nav>
+
+
+<!-- TASKS AND REVIEWS -->
+
+<div class="ci-two-col">
+
+
+<!-- MY TASKS -->
+
+<section class="panel" id="tasks">
+
+    <div class="panel-heading">
+
+        <div>
+            <h3>My Tasks</h3>
+            <p><?= $pendingTasks ?> pending</p>
+        </div>
+
+    </div>
+
+
+    <form class="ci-form"
+          method="post"
+          action="dashboard-actions.php">
+
+        <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+        <input type="hidden" name="action" value="task_add">
+
+        <label>
+
+            Task title
+
+            <input
+                required
+                name="title"
+                maxlength="255"
+                placeholder="e.g. Follow up on review"
+            >
+
+        </label>
+
+
+        <label>
+
+            Description
+
+            <textarea name="description" rows="2"></textarea>
+
+        </label>
+
+
+        <div class="ci-form-row">
+
+            <label>
+
+                Due date
+
+                <input
+                    type="datetime-local"
+                    name="due_date"
+                >
+
+            </label>
+
+
+            <label>
+
+                Patient (optional)
+
+                <select name="patient_id">
+
+                    <option value="">Unlinked</option>
+
+                    <?php foreach ($patients as $p): ?>
+
+                        <option value="<?= h($p['patient_id']) ?>">
+                            <?= h($p['last_name'] . ', ' . $p['first_name']) ?>
+                        </option>
+
+                    <?php endforeach; ?>
+
+                </select>
+
+            </label>
+
+        </div>
+
+
+        <button class="ci-button" type="submit">
+            Add task
+        </button>
+
+    </form>
+
+
+    <div class="ci-list">
+
+        <?php if (!$tasks): ?>
+
+            <p class="ci-empty">
+                No tasks yet. Add a task above.
+            </p>
+
+        <?php endif; ?>
+
+
+        <?php foreach ($tasks as $t): ?>
+
+            <article class="ci-item
+                <?= $t['task_status'] === 'completed'
+                    ? 'ci-done'
+                    : '' ?>">
+
+                <div class="ci-item-main">
+
+                    <strong>
+                        <?= h($t['task_title']) ?>
+                    </strong>
+
+                    <p>
+                        <?= h($t['task_description'] ?? '') ?>
+                    </p>
+
+                    <small>
+
+                        <?php if ($t['pf']): ?>
+
+                            Patient:
+                            <?= h($t['pf'] . ' ' . $t['pl']) ?>
+                            ·
+
+                        <?php endif; ?>
+
+                        <?php if ($t['due_date']): ?>
+
+                            Due
+                            <?= h(date(
+                                'd M Y H:i',
+                                strtotime($t['due_date'])
+                            )) ?>
+
+                        <?php else: ?>
+
+                            No due date
+
+                        <?php endif; ?>
+
+                    </small>
+
+                </div>
+
+
+                <div class="ci-actions">
+
+                    <form
+                        method="post"
+                        action="dashboard-actions.php"
+                    >
+
+                        <input
+                            type="hidden"
+                            name="csrf"
+                            value="<?= h($csrf) ?>"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="task_toggle"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="id"
+                            value="<?= h($t['task_id']) ?>"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="status"
+                            value="<?= $t['task_status'] === 'completed'
+                                ? 'pending'
+                                : 'completed' ?>"
+                        >
+
+                        <button class="ci-small" type="submit">
+
+                            <?= $t['task_status'] === 'completed'
+                                ? 'Undo'
+                                : 'Complete' ?>
+
+                        </button>
+
+                    </form>
+
+
+                    <form
+                        method="post"
+                        action="dashboard-actions.php"
+                        onsubmit="return confirm('Delete this task?')"
+                    >
+
+                        <input
+                            type="hidden"
+                            name="csrf"
+                            value="<?= h($csrf) ?>"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="task_delete"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="id"
+                            value="<?= h($t['task_id']) ?>"
+                        >
+
+                        <button
+                            class="ci-small ci-danger"
+                            type="submit"
+                        >
+                            Delete
+                        </button>
+
+                    </form>
+
+                </div>
+
+            </article>
+
+        <?php endforeach; ?>
+
+    </div>
+
+</section>
+
+
+<!-- CLINICAL REVIEWS -->
+
+<section class="panel" id="reviews">
+
+    <div class="panel-heading">
+
+        <div>
+            <h3>Clinical Reviews</h3>
+            <p>Workflow tracker (not a clinical decision tool)</p>
+        </div>
+
+    </div>
+
+
+    <form class="ci-form"
+          method="post"
+          action="dashboard-actions.php">
+
+        <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+        <input type="hidden" name="action" value="review_add">
+
+
+        <div class="ci-form-row">
+
+            <label>
+
+                Patient
+
+                <select required name="patient_id">
+
+                    <option value="">Choose patient</option>
+
+                    <?php foreach ($patients as $p): ?>
+
+                        <option value="<?= h($p['patient_id']) ?>">
+                            <?= h($p['last_name'] . ', ' . $p['first_name']) ?>
+                        </option>
+
+                    <?php endforeach; ?>
+
+                </select>
+
+            </label>
+
+
+            <label>
+
+                Review title
+
+                <input
+                    required
+                    name="title"
+                    maxlength="255"
+                    placeholder="Review subject"
+                >
+
+            </label>
+
+        </div>
+
+
+        <label>
+
+            Notes
+
+            <textarea name="notes" rows="2"></textarea>
+
+        </label>
+
+
+        <button class="ci-button" type="submit">
+            Create review
+        </button>
+
+    </form>
+
+
+    <div class="ci-list">
+
+        <?php if (!$reviews): ?>
+
+            <p class="ci-empty">
+                No reviews in your queue.
+            </p>
+
+        <?php endif; ?>
+
+
+        <?php foreach ($reviews as $r): ?>
+
+            <article class="ci-item">
+
+                <div class="ci-item-main">
+
+                    <strong>
+                        <?= h($r['review_title']) ?>
+                    </strong>
+
+                    <p>
+                        <?= h($r['review_notes'] ?? '') ?>
+                    </p>
+
+                    <small>
+
+                        <?= h($r['pf'] . ' ' . $r['pl']) ?>
+                        ·
+                        <?= h($r['review_status']) ?>
+
+                    </small>
+
+                </div>
+
+
+                <?php if ($r['review_status'] === 'pending'): ?>
+
+                    <form
+                        method="post"
+                        action="dashboard-actions.php"
+                    >
+
+                        <input
+                            type="hidden"
+                            name="csrf"
+                            value="<?= h($csrf) ?>"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="review_toggle"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="id"
+                            value="<?= h($r['review_id']) ?>"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="status"
+                            value="completed"
+                        >
+
+                        <button class="ci-small" type="submit">
+                            Complete
+                        </button>
+
+                    </form>
+
+                <?php endif; ?>
+
+            </article>
+
+        <?php endforeach; ?>
+
+    </div>
+
+</section>
+
+</div>
+
+
+<!-- PATIENT MANAGEMENT -->
+
+<section class="panel" id="patients">
+
+    <div class="panel-heading">
+
+        <div>
+            <h3>Patient Management</h3>
+            <p>Patient directory</p>
+        </div>
+
+    </div>
+
+
+    <div class="ci-search">
+
+        <input
+            id="patientSearch"
+            type="search"
+            placeholder="Search name or ID"
+        >
+
+    </div>
+
+
+    <div class="ci-table-wrap">
+
+        <table class="ci-table">
+
+            <thead>
+
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Birth date</th>
+                    <th>Sex</th>
+                    <th>Country</th>
+                </tr>
+
+            </thead>
+
+
+            <tbody id="patientRows">
+
+                <?php foreach ($patients as $p): ?>
+
+                    <tr>
+
+                        <td>
+                            <?= h($p['patient_id']) ?>
+                        </td>
+
+                        <td>
+                            <?= h($p['first_name'] . ' ' . $p['last_name']) ?>
+                        </td>
+
+                        <td>
+                            <?= h($p['birthdate']) ?>
+                        </td>
+
+                        <td>
+                            <?= h($p['sex']) ?>
+                        </td>
+
+                        <td>
+                            <?= h($p['country']) ?>
+                        </td>
+
+                    </tr>
+
+                <?php endforeach; ?>
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+
+    <p class="ci-note">
+        This prototype directory currently lists database
+        patients globally. Provider-to-patient authorisation
+        and access controls are not implemented.
+    </p>
+
+</section>
+
+
+<!-- REPORTS AND APPOINTMENTS -->
+
+<div class="ci-two-col">
+
+
+<!-- REPORTS -->
+
+<section class="panel" id="reports">
+
+    <div class="panel-heading">
+
+        <div>
+            <h3>Reports</h3>
+            <p>Draft and released report records</p>
+        </div>
+
+    </div>
+
+
+    <form class="ci-form"
+          method="post"
+          action="dashboard-actions.php">
+
+        <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+        <input type="hidden" name="action" value="report_add">
+
+
+        <label>
+
+            Report title
+
+            <input
+                name="title"
+                required
+                maxlength="255"
+            >
+
+        </label>
+
+
+        <label>
+
+            Patient (optional)
+
+            <select name="patient_id">
+
+                <option value="">Unlinked</option>
+
+                <?php foreach ($patients as $p): ?>
+
+                    <option value="<?= h($p['patient_id']) ?>">
+                        <?= h($p['last_name'] . ', ' . $p['first_name']) ?>
+                    </option>
+
+                <?php endforeach; ?>
+
+            </select>
+
+        </label>
+
+
+        <label>
+
+            Summary
+
+            <textarea name="summary" rows="2"></textarea>
+
+        </label>
+
+
+        <button class="ci-button" type="submit">
+            Create draft
+        </button>
+
+    </form>
+
+
+    <div class="ci-list">
+
+        <?php if (!$reports): ?>
+
+            <p class="ci-empty">
+                No reports created.
+            </p>
+
+        <?php endif; ?>
+
+
+        <?php foreach ($reports as $r): ?>
+
+            <article class="ci-item">
+
+                <div class="ci-item-main">
+
+                    <strong>
+                        <?= h($r['report_title']) ?>
+                    </strong>
+
+                    <p>
+                        <?= h($r['report_summary'] ?? '') ?>
+                    </p>
+
+                    <small>
+
+                        <?= h(
+                            ($r['pf']
+                                ? $r['pf'] . ' ' . $r['pl'] . ' · '
+                                : '')
+                            . $r['report_status']
+                        ) ?>
+
+                    </small>
+
+                </div>
+
+
+                <?php if ($r['report_status'] === 'draft'): ?>
+
+                    <form
+                        method="post"
+                        action="dashboard-actions.php"
+                    >
+
+                        <input
+                            type="hidden"
+                            name="csrf"
+                            value="<?= h($csrf) ?>"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="report_release"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="id"
+                            value="<?= h($r['report_id']) ?>"
+                        >
+
+                        <button class="ci-small" type="submit">
+                            Mark released
+                        </button>
+
+                    </form>
+
+                <?php endif; ?>
+
+            </article>
+
+        <?php endforeach; ?>
+
+    </div>
+
+
+    <p class="ci-note">
+        Report release is a status change only.
+        No clinical report document is generated.
+    </p>
+
+</section>
+
+
+<!-- APPOINTMENTS -->
+
+<section class="panel" id="appointments">
+
+    <div class="panel-heading">
+
+        <div>
+            <h3>Appointments</h3>
+            <p>Schedule and manage appointments</p>
+        </div>
+
+    </div>
+
+
+    <form class="ci-form"
+          method="post"
+          action="dashboard-actions.php">
+
+        <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+        <input type="hidden" name="action" value="appointment_add">
+
+
+        <label>
+
+            Title
+
+            <input
+                required
+                name="title"
+                maxlength="255"
+            >
+
+        </label>
+
+
+        <div class="ci-form-row">
+
+            <label>
+
+                Date and time
+
+                <input
+                    required
+                    type="datetime-local"
+                    name="when"
+                >
+
+            </label>
+
+
+            <label>
+
+                Patient (optional)
+
+                <select name="patient_id">
+
+                    <option value="">Unlinked</option>
+
+                    <?php foreach ($patients as $p): ?>
+
+                        <option value="<?= h($p['patient_id']) ?>">
+                            <?= h($p['last_name'] . ', ' . $p['first_name']) ?>
+                        </option>
+
+                    <?php endforeach; ?>
+
+                </select>
+
+            </label>
+
+        </div>
+
+
+        <label>
+
+            Location
+
+            <input name="location">
+
+        </label>
+
+
+        <label>
+
+            Notes
+
+            <textarea name="notes" rows="2"></textarea>
+
+        </label>
+
+
+        <button class="ci-button" type="submit">
+            Schedule
+        </button>
+
+    </form>
+
+
+    <div class="ci-list">
+
+        <?php if (!$appointments): ?>
+
+            <p class="ci-empty">
+                No upcoming scheduled appointments.
+            </p>
+
+        <?php endif; ?>
+
+
+        <?php foreach ($appointments as $a): ?>
+
+            <article class="ci-item">
+
+                <div class="ci-item-main">
+
+                    <strong>
+                        <?= h($a['appointment_title']) ?>
+                    </strong>
+
+                    <p>
+
+                        <?= h(date(
+                            'd M Y, H:i',
+                            strtotime($a['appointment_datetime'])
+                        )) ?>
+
+                        <?= $a['location']
+                            ? ' · ' . h($a['location'])
+                            : '' ?>
+
+                    </p>
+
+                    <small>
+
+                        <?= h(
+                            $a['pf']
+                                ? $a['pf'] . ' ' . $a['pl']
+                                : 'No patient linked'
+                        ) ?>
+
+                        <?= $a['appointment_notes']
+                            ? ' · ' . h($a['appointment_notes'])
+                            : '' ?>
+
+                    </small>
+
+                </div>
+
+
+                <form
+                    method="post"
+                    action="dashboard-actions.php"
+                >
+
+                    <input
+                        type="hidden"
+                        name="csrf"
+                        value="<?= h($csrf) ?>"
+                    >
+
+                    <input
+                        type="hidden"
+                        name="action"
+                        value="appointment_cancel"
+                    >
+
+                    <input
+                        type="hidden"
+                        name="id"
+                        value="<?= h($a['appointment_id']) ?>"
+                    >
+
+                    <button
+                        class="ci-small ci-danger"
+                        type="submit"
+                    >
+                        Cancel
+                    </button>
+
+                </form>
+
+            </article>
+
+        <?php endforeach; ?>
+
+    </div>
+
+</section>
+
+</div>
+
+
+<!-- RECENT ACTIVITY -->
+
+<section class="panel" id="activity">
+
+    <div class="panel-heading">
+
+        <div>
+            <h3>Recent Activity</h3>
+            <p>Activity records from the audit log</p>
+        </div>
+
+    </div>
+
+
+    <div class="ci-list">
+
+        <?php if (!$activity): ?>
+
+            <p class="ci-empty">
+                No activity entries found.
+            </p>
+
+        <?php endif; ?>
+
+
+        <?php foreach ($activity as $a): ?>
+
+            <article class="ci-item">
+
+                <div class="ci-item-main">
+
+                    <strong>
+                        <?= h(str_replace('_', ' ', $a['action'])) ?>
+                    </strong>
+
+                    <p>
+                        <?= h($a['details'] ?? '') ?>
+                    </p>
+
+                    <small>
+
+                        <?= h($a['entity_type'] ?? '') ?>
+                        ·
+                        <?= h($a['created_at']) ?>
+
+                    </small>
+
+                </div>
+
+            </article>
+
+        <?php endforeach; ?>
+
+    </div>
+
+
+    <p class="ci-note">
+        Some actions may not be recorded if the existing
+        audit-log schema rejects optional details.
+    </p>
+
+</section>
+
+
+<!-- PREDICTION ANALYTICS -->
+
+<section class="panel" id="predictions">
+
+    <div class="panel-heading">
+
+        <div>
+            <h3>Prediction Analytics</h3>
+            <p>
+                Aggregate prediction-result data
+                associated with your account
+            </p>
+        </div>
+
+    </div>
+
+
+    <div class="ci-chart-box">
+
+        <canvas id="predictionChart"></canvas>
+
+    </div>
+
+
+    <?php if (!$predictionDist): ?>
+
+        <p class="ci-empty">
+            No prediction-result distribution data to chart yet.
+        </p>
+
+    <?php endif; ?>
+
+</section>
+
+
+<!-- TCGA RESEARCH -->
+
+<section class="analytics-section" id="tcga">
+
+    <div class="analytics-heading">
+
+        <div>
+
+            <p class="eyebrow">RESEARCH DATA</p>
+
+            <h2>TCGA Research Insights</h2>
+
+            <p>
+                Research cohort analytics are separate
+                from individual patient records.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <section class="research-summary-grid">
+
+        <article class="research-summary-card">
+
+            <span class="research-summary-label">
+                TCGA Samples
+            </span>
+
+            <strong>
+                <?= number_format($tcgaCount) ?>
+            </strong>
+
+            <span class="research-summary-caption">
+                Samples in research dataset
+            </span>
+
+        </article>
+
+
+        <article class="research-summary-card">
+
+            <span class="research-summary-label">
+                PASS Variants
+            </span>
+
+            <strong>
+                <?= number_format($passCount) ?>
+            </strong>
+
+            <span class="research-summary-caption">
+                PASS-filtered variants
+            </span>
+
+        </article>
+
+    </section>
+
+
+    <div class="analytics-grid">
+
+
+        <article class="chart-card">
+
+            <div class="chart-card-heading">
+
+                <h3>Samples by Cancer Type</h3>
+                <p>Top 10 cohorts</p>
+
+            </div>
+
+            <div class="chart-container">
+
+                <canvas id="sampleChart"></canvas>
+
+            </div>
+
+        </article>
+
+
+        <article class="chart-card">
+
+            <div class="chart-card-heading">
+
+                <h3>PASS Variants by Cancer Type</h3>
+                <p>Top 10 cohorts</p>
+
+            </div>
+
+            <div class="chart-container">
+
+                <canvas id="passChart"></canvas>
+
+            </div>
+
+        </article>
+
+
+        <article class="chart-card">
+
+            <div class="chart-card-heading">
+
+                <h3>Variant Quality</h3>
+                <p>PASS and non-PASS</p>
+
+            </div>
+
+            <div class="chart-container doughnut-container">
+
+                <canvas id="qualityChart"></canvas>
+
+            </div>
+
+        </article>
+
+    </div>
+
+</section>
+
+
+<!-- PROFESSIONAL PROFILE -->
+
+<section class="panel profile-panel">
+
+    <div class="panel-heading">
+
+        <div>
+            <h3>Professional Profile</h3>
+            <p>Registered information</p>
+        </div>
+
+    </div>
+
+
+    <div class="profile-details-grid">
+
+        <div class="profile-detail">
+
+            <span>Name</span>
+
+            <strong>
+                Dr. <?= h($fullName) ?>
+            </strong>
+
+        </div>
+
+
+        <div class="profile-detail">
+
+            <span>Institution</span>
+
+            <strong>
+                <?= h($oncologist['institution'] ?: 'Not specified') ?>
+            </strong>
+
+        </div>
+
+
+        <div class="profile-detail">
+
+            <span>Speciality</span>
+
+            <strong>
+                <?= h($oncologist['speciality'] ?: 'Not specified') ?>
+            </strong>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+</main>
+
+
+<!-- CHART.JS -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+
+// Patient directory search
+
+const patientSearch = document.getElementById('patientSearch');
+
+patientSearch?.addEventListener('input', () => {
+
+    const q = patientSearch.value.toLowerCase();
+
+    document.querySelectorAll('#patientRows tr').forEach(row => {
+
+        row.hidden = !row.innerText.toLowerCase().includes(q);
+
+    });
+
+});
+
+
+// Prediction chart
+
+const predictionData = <?= json_encode(
+    $predictionDist,
+    JSON_HEX_TAG |
+    JSON_HEX_APOS |
+    JSON_HEX_QUOT |
+    JSON_HEX_AMP
+) ?>;
+
+
+if (predictionData.length) {
+
+    new Chart(
+        document.getElementById('predictionChart'),
+        {
+
+            type: 'bar',
+
+            data: {
+
+                labels: predictionData.map(
+                    item => item.cancer_type
+                ),
+
+                datasets: [{
+
+                    label: 'Average prediction probability',
+
+                    data: predictionData.map(
+                        item => Number(item.avg_probability)
+                    ),
+
+                    backgroundColor: '#648B83'
+
+                }]
+
+            },
+
+            options: {
+
+                responsive: true,
+
+                maintainAspectRatio: false,
+
+                scales: {
+
+                    y: {
+
+                        beginAtZero: true,
+                        max: 1
+
+                    }
+
+                }
+
+            }
+
+        }
+    );
+
+}
+
+
+// TCGA charts
+
+async function loadTCGA() {
+
+    try {
+
+        const response = await fetch(
+            'tcga-dashboard-data.php'
+        );
+
+        if (!response.ok) {
+            throw new Error('TCGA endpoint failed');
+        }
+
+        const data = await response.json();
+
+
+        // Samples by cancer type
+
+        const sampleData =
+            data.cancer_distribution.slice(0, 10);
+
+
+        new Chart(
+            document.getElementById('sampleChart'),
+            {
+
+                type: 'bar',
+
+                data: {
+
+                    labels: sampleData.map(
+                        item => item.cancer_type
+                    ),
+
+                    datasets: [{
+
+                        label: 'Samples',
+
+                        data: sampleData.map(
+                            item => Number(item.sample_count)
+                        ),
+
+                        backgroundColor: '#648B83'
+
+                    }]
+
+                },
+
+                options: {
+
+                    indexAxis: 'y',
+
+                    responsive: true,
+
+                    maintainAspectRatio: false,
+
+                    plugins: {
+
+                        legend: {
+                            display: false
+                        }
+
+                    }
+
+                }
+
+            }
+        );
+
+
+        // PASS variants by cancer type
+
+        const passData =
+            data.pass_distribution.slice(0, 10);
+
+
+        new Chart(
+            document.getElementById('passChart'),
+            {
+
+                type: 'bar',
+
+                data: {
+
+                    labels: passData.map(
+                        item => item.cancer_type
+                    ),
+
+                    datasets: [{
+
+                        label: 'PASS variants',
+
+                        data: passData.map(
+                            item => Number(item.pass_count)
+                        ),
+
+                        backgroundColor: '#7895B2'
+
+                    }]
+
+                },
+
+                options: {
+
+                    indexAxis: 'y',
+
+                    responsive: true,
+
+                    maintainAspectRatio: false,
+
+                    plugins: {
+
+                        legend: {
+                            display: false
+                        }
+
+                    }
+
+                }
+
+            }
+        );
+
+
+        // PASS and non-PASS variants
+
+        const pass = data.variant_quality
+            .filter(item => item.filter_status === 'PASS')
+            .reduce(
+                (sum, item) => sum + Number(item.variant_count),
+                0
+            );
+
+        const nonPass = data.variant_quality
+            .filter(item => item.filter_status !== 'PASS')
+            .reduce(
+                (sum, item) => sum + Number(item.variant_count),
+                0
+            );
+
+
+        new Chart(
+            document.getElementById('qualityChart'),
+            {
+
+                type: 'doughnut',
+
+                data: {
+
+                    labels: ['PASS', 'Non-PASS'],
+
+                    datasets: [{
+
+                        data: [pass, nonPass],
+
+                        backgroundColor: [
+                            '#648B83',
+                            '#D7A878'
+                        ],
+
+                        borderWidth: 0
+
+                    }]
+
+                },
+
+                options: {
+
+                    responsive: true,
+
+                    maintainAspectRatio: false,
+
+                    cutout: '70%'
+
+                }
+
+            }
+        );
+
+    } catch (error) {
+
+        console.error('TCGA charts:', error);
+
+    }
+
+}
+
+<?php if ($tcgaDataAvailable): ?>
+
+    loadTCGA();
+
+<?php endif; ?>
+
+</script>
+
+</body>
+</html>

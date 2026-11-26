@@ -1,0 +1,585 @@
+<?php
+session_start();
+
+require_once __DIR__ . '/../../includes/db.php';
+
+// =====================================================
+// AUTHENTICATION
+// =====================================================
+
+if (
+    !isset($_SESSION['user_id'], $_SESSION['role']) ||
+    $_SESSION['role'] !== 'oncologist'
+) {
+    header('Location: ../login.php');
+    exit;
+}
+
+$user_id = (int) $_SESSION['user_id'];
+
+
+// =====================================================
+// CSRF VALIDATION
+// =====================================================
+
+if (
+    $_SERVER['REQUEST_METHOD'] !== 'POST' ||
+    !isset($_POST['csrf'], $_SESSION['csrf']) ||
+    !hash_equals($_SESSION['csrf'], $_POST['csrf'])
+) {
+    http_response_code(403);
+    exit('Invalid request.');
+}
+
+
+// =====================================================
+// HELPERS
+// =====================================================
+
+function redirectDashboard() {
+    header('Location: oncologist-dashboard.php');
+    exit;
+}
+
+function getPost($key) {
+    return trim($_POST[$key] ?? '');
+}
+
+function getPatientId() {
+    $id = getPost('patient_id');
+
+    if ($id === '') {
+        return null;
+    }
+
+    if (!ctype_digit($id) || (int)$id <= 0) {
+        throw new Exception('Invalid patient selection.');
+    }
+
+    return (int)$id;
+}
+
+function validatePatient(PDO $pdo, $patient_id) {
+
+    if ($patient_id === null) {
+        return;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT patient_id
+         FROM patients
+         WHERE patient_id = ?"
+    );
+
+    $stmt->execute([$patient_id]);
+
+    if (!$stmt->fetchColumn()) {
+        throw new Exception('Patient not found.');
+    }
+}
+
+function logActivity(
+    PDO $pdo,
+    $user_id,
+    $action,
+    $entity_type,
+    $entity_id,
+    $details = ''
+) {
+    try {
+
+        $stmt = $pdo->prepare("
+            INSERT INTO audit_logs
+            (user_id, action, entity_type, entity_id, details)
+            VALUES (?, ?, ?, ?, ?)
+        ");
+
+        $stmt->execute([
+            $user_id,
+            $action,
+            $entity_type,
+            $entity_id,
+            $details
+        ]);
+
+    } catch (Throwable $e) {
+
+        // Audit logging must not break the main action.
+        // The activity may not be recorded if this insert fails.
+
+    }
+}
+
+function validateDateTime($value) {
+
+    if ($value === '') {
+        return null;
+    }
+
+    // HTML datetime-local format: YYYY-MM-DDTHH:MM
+    $value = str_replace('T', ' ', $value);
+
+    $date = DateTime::createFromFormat(
+        'Y-m-d H:i',
+        $value
+    );
+
+    if (!$date || $date->format('Y-m-d H:i') !== $value) {
+        throw new Exception('Invalid date or time.');
+    }
+
+    return $value . ':00';
+}
+
+
+// =====================================================
+// ACTION
+// =====================================================
+
+$action = getPost('action');
+
+try {
+
+    // =================================================
+    // TASK: ADD
+    // =================================================
+
+    if ($action === 'task_add') {
+
+        $title = getPost('title');
+        $description = getPost('description');
+        $due_date = validateDateTime(getPost('due_date'));
+        $patient_id = getPatientId();
+
+        if ($title === '') {
+            throw new Exception('Task title is required.');
+        }
+
+        if (strlen($title) > 255) {
+            throw new Exception('Task title is too long.');
+        }
+
+        validatePatient($pdo, $patient_id);
+
+        $stmt = $pdo->prepare("
+            INSERT INTO oncologist_tasks
+            (
+                user_id,
+                patient_id,
+                task_title,
+                task_description,
+                due_date
+            )
+            VALUES (?, ?, ?, ?, ?)
+        ");
+
+        $stmt->execute([
+            $user_id,
+            $patient_id,
+            $title,
+            $description ?: null,
+            $due_date
+        ]);
+
+        $task_id = $pdo->lastInsertId();
+
+        logActivity(
+            $pdo,
+            $user_id,
+            'task_created',
+            'task',
+            $task_id,
+            $title
+        );
+
+        $_SESSION['flash'] = 'Task created successfully.';
+
+        redirectDashboard();
+    }
+
+
+    // =================================================
+    // TASK: TOGGLE STATUS
+    // =================================================
+
+    if ($action === 'task_toggle') {
+
+        $id = getPost('id');
+        $status = getPost('status');
+
+        if (
+            !ctype_digit($id) ||
+            !in_array($status, ['pending', 'completed'], true)
+        ) {
+            throw new Exception('Invalid task request.');
+        }
+
+        $stmt = $pdo->prepare("
+            UPDATE oncologist_tasks
+            SET task_status = ?
+            WHERE task_id = ?
+            AND user_id = ?
+        ");
+
+        $stmt->execute([
+            $status,
+            (int)$id,
+            $user_id
+        ]);
+
+        logActivity(
+            $pdo,
+            $user_id,
+            'task_status_changed',
+            'task',
+            (int)$id,
+            $status
+        );
+
+        $_SESSION['flash'] = 'Task status updated.';
+
+        redirectDashboard();
+    }
+
+
+    // =================================================
+    // TASK: DELETE
+    // =================================================
+
+    if ($action === 'task_delete') {
+
+        $id = getPost('id');
+
+        if (!ctype_digit($id)) {
+            throw new Exception('Invalid task.');
+        }
+
+        $stmt = $pdo->prepare("
+            DELETE FROM oncologist_tasks
+            WHERE task_id = ?
+            AND user_id = ?
+        ");
+
+        $stmt->execute([
+            (int)$id,
+            $user_id
+        ]);
+
+        logActivity(
+            $pdo,
+            $user_id,
+            'task_deleted',
+            'task',
+            (int)$id
+        );
+
+        $_SESSION['flash'] = 'Task deleted.';
+
+        redirectDashboard();
+    }
+
+
+    // =================================================
+    // REVIEW: CREATE
+    // =================================================
+
+    if ($action === 'review_add') {
+
+        $patient_id = getPatientId();
+        $title = getPost('title');
+        $notes = getPost('notes');
+
+        if ($patient_id === null) {
+            throw new Exception('A patient must be selected.');
+        }
+
+        if ($title === '') {
+            throw new Exception('Review title is required.');
+        }
+
+        validatePatient($pdo, $patient_id);
+
+        $stmt = $pdo->prepare("
+            INSERT INTO oncologist_reviews
+            (
+                user_id,
+                patient_id,
+                review_title,
+                review_notes,
+                review_status
+            )
+            VALUES (?, ?, ?, ?, 'pending')
+        ");
+
+        $stmt->execute([
+            $user_id,
+            $patient_id,
+            $title,
+            $notes ?: null
+        ]);
+
+        $review_id = $pdo->lastInsertId();
+
+        logActivity(
+            $pdo,
+            $user_id,
+            'review_created',
+            'review',
+            $review_id,
+            $title
+        );
+
+        $_SESSION['flash'] = 'Review added to your queue.';
+
+        redirectDashboard();
+    }
+
+
+    // =================================================
+    // REVIEW: COMPLETE
+    // =================================================
+
+    if ($action === 'review_toggle') {
+
+        $id = getPost('id');
+        $status = getPost('status');
+
+        if (
+            !ctype_digit($id) ||
+            !in_array($status, ['pending', 'completed'], true)
+        ) {
+            throw new Exception('Invalid review request.');
+        }
+
+        $stmt = $pdo->prepare("
+            UPDATE oncologist_reviews
+            SET review_status = ?
+            WHERE review_id = ?
+            AND user_id = ?
+        ");
+
+        $stmt->execute([
+            $status,
+            (int)$id,
+            $user_id
+        ]);
+
+        logActivity(
+            $pdo,
+            $user_id,
+            'review_status_changed',
+            'review',
+            (int)$id,
+            $status
+        );
+
+        $_SESSION['flash'] = 'Review status updated.';
+
+        redirectDashboard();
+    }
+
+
+    // =================================================
+    // REPORT: CREATE DRAFT
+    // =================================================
+
+    if ($action === 'report_add') {
+
+        $title = getPost('title');
+        $summary = getPost('summary');
+        $patient_id = getPatientId();
+
+        if ($title === '') {
+            throw new Exception('Report title is required.');
+        }
+
+        validatePatient($pdo, $patient_id);
+
+        $stmt = $pdo->prepare("
+            INSERT INTO oncologist_reports
+            (
+                user_id,
+                patient_id,
+                report_title,
+                report_summary,
+                report_status
+            )
+            VALUES (?, ?, ?, ?, 'draft')
+        ");
+
+        $stmt->execute([
+            $user_id,
+            $patient_id,
+            $title,
+            $summary ?: null
+        ]);
+
+        $report_id = $pdo->lastInsertId();
+
+        logActivity(
+            $pdo,
+            $user_id,
+            'report_created',
+            'report',
+            $report_id,
+            $title
+        );
+
+        $_SESSION['flash'] = 'Report draft created.';
+
+        redirectDashboard();
+    }
+
+
+    // =================================================
+    // REPORT: RELEASE
+    // =================================================
+
+    if ($action === 'report_release') {
+
+        $id = getPost('id');
+
+        if (!ctype_digit($id)) {
+            throw new Exception('Invalid report.');
+        }
+
+        $stmt = $pdo->prepare("
+            UPDATE oncologist_reports
+            SET report_status = 'released'
+            WHERE report_id = ?
+            AND user_id = ?
+            AND report_status = 'draft'
+        ");
+
+        $stmt->execute([
+            (int)$id,
+            $user_id
+        ]);
+
+        logActivity(
+            $pdo,
+            $user_id,
+            'report_released',
+            'report',
+            (int)$id
+        );
+
+        $_SESSION['flash'] = 'Report marked as released.';
+
+        redirectDashboard();
+    }
+
+
+    // =================================================
+    // APPOINTMENT: CREATE
+    // =================================================
+
+    if ($action === 'appointment_add') {
+
+        $title = getPost('title');
+        $when = validateDateTime(getPost('when'));
+        $patient_id = getPatientId();
+        $location = getPost('location');
+        $notes = getPost('notes');
+
+        if ($title === '') {
+            throw new Exception('Appointment title is required.');
+        }
+
+        if ($when === null) {
+            throw new Exception('Appointment date is required.');
+        }
+
+        validatePatient($pdo, $patient_id);
+
+        $stmt = $pdo->prepare("
+            INSERT INTO oncologist_appointments
+            (
+                user_id,
+                patient_id,
+                appointment_title,
+                appointment_datetime,
+                location,
+                appointment_notes,
+                appointment_status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 'scheduled')
+        ");
+
+        $stmt->execute([
+            $user_id,
+            $patient_id,
+            $title,
+            $when,
+            $location ?: null,
+            $notes ?: null
+        ]);
+
+        $appointment_id = $pdo->lastInsertId();
+
+        logActivity(
+            $pdo,
+            $user_id,
+            'appointment_created',
+            'appointment',
+            $appointment_id,
+            $title
+        );
+
+        $_SESSION['flash'] = 'Appointment scheduled.';
+
+        redirectDashboard();
+    }
+
+
+    // =================================================
+    // APPOINTMENT: CANCEL
+    // =================================================
+
+    if ($action === 'appointment_cancel') {
+
+        $id = getPost('id');
+
+        if (!ctype_digit($id)) {
+            throw new Exception('Invalid appointment.');
+        }
+
+        $stmt = $pdo->prepare("
+            UPDATE oncologist_appointments
+            SET appointment_status = 'cancelled'
+            WHERE appointment_id = ?
+            AND user_id = ?
+            AND appointment_status = 'scheduled'
+        ");
+
+        $stmt->execute([
+            (int)$id,
+            $user_id
+        ]);
+
+        logActivity(
+            $pdo,
+            $user_id,
+            'appointment_cancelled',
+            'appointment',
+            (int)$id
+        );
+
+        $_SESSION['flash'] = 'Appointment cancelled.';
+
+        redirectDashboard();
+    }
+
+
+    // =================================================
+    // UNKNOWN ACTION
+    // =================================================
+
+    throw new Exception('Unknown action.');
+
+} catch (Throwable $e) {
+
+    $_SESSION['flash'] = $e->getMessage();
+
+    redirectDashboard();
+}
