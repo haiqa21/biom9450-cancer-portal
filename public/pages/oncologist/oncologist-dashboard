@@ -238,10 +238,6 @@ unset($_SESSION['flash']);
 
 <title>CancerInsight | Oncologist Workspace</title>
 
-<link rel="stylesheet" href="../style/app.css">
-<link rel="stylesheet" href="../style/oncologist/TCGA.css">
-<link rel="stylesheet" href="../style/oncologist/dashboard.css">
-
 </head>
 
 <body>
