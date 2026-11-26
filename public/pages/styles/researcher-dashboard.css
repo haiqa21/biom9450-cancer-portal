@@ -184,3 +184,5 @@
 @media (max-width: 1000px) {
     .explorer { grid-template-columns: minmax(0, 1fr); }
 }
+
+.type-picker label {font-style: normal; }

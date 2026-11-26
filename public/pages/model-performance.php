@@ -14,6 +14,7 @@ $currentUser = ['user_id' => 0, 'name' => 'Dr Placeholder', 'role' => 'researche
 $pageTitle  = 'Model performance';
 $activePage = 'model-performance';
 $pageStyles = ['model-performance.css'];
+$pageScripts = ['chart.umd.min.js','model-performance.js'];
 
 // Fewer released predictions than this and the charts would mislead, so
 // they're replaced with a "too few to chart" message (the tables still show).
@@ -48,7 +49,24 @@ if ($from !== '' && $to !== '' && $from > $to) {
 //   1 .. MIN_TO_CHART-1 -> tables only, charts say "Too few released reports to chart (n = 6)."
 $releasedCount = null;
 
-// TODO: record the view: audit_logs action 'view_model_performance', detail = the query string
+// Held-out test results, saved by ml/train_mutations.py
+// The file path is fixed (never taken from the URL), so nobody can make the
+// page read a different file. If the file is missing or broken, the section
+// shows a short message instead of crashing the page.
+$testMetrics = null;
+$metricsFile = __DIR__ . '/../../ml/model_metrics.json';
+if (is_readable($metricsFile)) {
+
+    $decoded = json_decode(file_get_contents($metricsFile), true);
+
+    if (is_array($decoded) && isset($decoded['cancer_types'], $decoded['per_type'],
+            $decoded['confusion_counts'], $decoded['cross_validation'], $decoded['roc'])) {
+        $testMetrics = $decoded;
+    }
+}
+if ($testMetrics === null) {
+    error_log('model-performance: ml/model_metrics.json is missing or invalid');
+}
 
 require __DIR__ . '/../../includes/header.php';
 ?>
@@ -59,9 +77,237 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<!-- ===================================================================
-     1. Filters
-     =================================================================== -->
+
+<section class="card" aria-labelledby="test-heading">
+    <div class="card-header">
+        <h2 id="test-heading">How the model was tested</h2>
+        <span class="muted small-text">Evaluated on held-out TCGA test patients, not clinically validated.</span>
+    </div>
+
+    <?php if ($testMetrics === null): ?>
+    <p class="muted">Test results aren't available yet.</p>
+    <?php else:
+        $t = $testMetrics;
+        $types = $t['cancer_types'];
+        $lr = $t['cross_validation']['Logistic regression'];
+    ?>
+
+    <!-- Headline tiles -->
+    <div class="tiles">
+        <div class="tile">
+            <span class="tile-value"><?= round((float)$t['accuracy'] * 100) ?>%</span>
+            <span class="tile-label">Test accuracy</span>
+            <span class="muted small-text">n = <?= (int)$t['n_test_patients'] ?> · always guessing the most common type: <?= round((float)$t['baseline_accuracy'] * 100) ?>%</span>
+        </div>
+        <div class="tile">
+            <span class="tile-value"><?= number_format((float)$lr['mean_macro_f1'], 2) ?> ± <?= number_format((float)$lr['sd'], 2) ?></span>
+            <span class="tile-label">5-fold cross-validation (macro F1)</span>
+        </div>
+        <div class="tile">
+            <span class="tile-value"><?= number_format((float)$t['macro_auc'], 2) ?></span>
+            <span class="tile-label">Average AUC (one-vs-rest)</span>
+        </div>
+        <div class="tile">
+            <span class="tile-value"><?= round((float)$t['test_confident']['accuracy'] * 100) ?>%</span>
+            <span class="tile-label">Correct when confidence ≥ <?= round((float)$t['confidence_threshold'] * 100) ?>%</span>
+            <span class="muted small-text"><?= (int)$t['test_flagged']['n'] ?> of <?= (int)$t['n_test_patients'] ?> flagged as uncertain (<?= round((float)$t['test_flagged']['accuracy'] * 100) ?>% correct)</span>
+        </div>
+    </div>
+
+    <!-- Confusion matrix as a shaded table: no JavaScript needed.
+         Darker cell = bigger share of that row. Each cell shows count and row %. -->
+    <h3>Confusion matrix (test set)</h3>
+    <p class="muted small-text">Rows: true cancer type · Columns: model's call · Diagonal = correct</p>
+    <div class="table-wrap">
+        <table class="confusion-table heatmap">
+            <thead>
+                <tr>
+                    <th scope="col"><span class="visually-hidden">True type</span></th>
+                    <?php foreach ($types as $c): ?>
+                    <th scope="col"><?= e($c) ?></th>
+                    <?php endforeach; ?>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($types as $r => $trueType): ?>
+                <tr>
+                    <th scope="row"><span class="cancer-name"><span class="dot dot-<?= e(strtolower($trueType)) ?>" aria-hidden="true"></span><?= e($trueType) ?></span></th>
+                    <?php foreach ($types as $col => $c):
+                        $count = (int)$t['confusion_counts'][$r][$col];
+                        $pct   = (int)$t['confusion_percent'][$r][$col];
+                    ?>
+                    <td class="num heat<?= $pct >= 50 ? ' heat-strong' : '' ?><?= $r === $col ? ' diagonal' : '' ?>" style="--pct: <?= $pct ?>">
+                        <?= $count ?> <span class="small-text">(<?= $pct ?>%)</span>
+                    </td>
+                    <?php endforeach; ?>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="grid-2">
+        <!-- Per-type metrics: chart + table (the table is also the fallback) -->
+        <div>
+            <h3>Each cancer type</h3>
+            <div id="chart-test-types" class="chart-slot" role="img"
+                 aria-label="Recall, precision and specificity for each cancer type on the test set">
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Cancer type</th>
+                            <th scope="col">n</th>
+                            <th scope="col">Recall</th>
+                            <th scope="col">Precision</th>
+                            <th scope="col">Specificity</th>
+                            <th scope="col">F1</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($t['per_type'] as $row): ?>
+                        <tr>
+                            <td><span class="cancer-name"><span class="dot dot-<?= e(strtolower($row['cancer_type'])) ?>" aria-hidden="true"></span><?= e($row['cancer_type']) ?></span></td>
+                            <td class="num"><?= (int)$row['patients'] ?></td>
+                            <td class="num"><?= number_format((float)$row['recall (sensitivity)'], 2) ?></td>
+                            <td class="num"><?= number_format((float)$row['precision'], 2) ?></td>
+                            <td class="num"><?= number_format((float)$row['specificity'], 2) ?></td>
+                            <td class="num"><?= number_format((float)$row['F1'], 2) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cross-validation: one line per model, one point per fold -->
+        <div>
+            <h3>Cross-validation: logistic regression vs random forest</h3>
+            <div id="chart-test-cv" class="chart-slot chart-short" role="img"
+                 aria-label="Macro F1 in each of the 5 cross-validation folds for both models">
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Model</th>
+                            <th scope="col">Mean macro F1</th>
+                            <th scope="col">± SD</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($t['cross_validation'] as $model => $cv): ?>
+                        <tr>
+                            <td><?= e($model) ?></td>
+                            <td class="num"><?= number_format((float)$cv['mean_macro_f1'], 2) ?></td>
+                            <td class="num"><?= number_format((float)$cv['sd'], 2) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!--  How stratified 5-fold cross-validation works (diagram and chart) -->
+    <?php if (!empty($t['cv_folds'])):
+        $cvFolds = $t['cv_folds'];
+        $k = count($cvFolds);
+        $nCv = (int)$cvFolds[0]['n_train'] + (int)$cvFolds[0]['n_val'];
+        $cvModels = $t['cross_validation'];
+    ?>
+    <h3>How stratified <?= $k ?>-fold cross-validation works</h3>
+    <p class="muted small-text">
+        The <?= $nCv ?> training patients are cut into <?= $k ?> folds with the same cancer-type mix.
+        Each round trains on <?= $k - 1 ?> folds and scores the remaining one, with the 200 genes re-chosen every round.
+        The <?= (int)$t['n_test_patients'] ?> test patients are locked away and only used once, at the end.
+    </p>
+
+    <!-- Pure HTML/CSS diagram: every block has a text label, so colour is never the only clue -->
+    <div class="cv-diagram" role="img" aria-label="Diagram: in each of <?= $k ?> rounds a different fold is used for scoring and the others for training; the test set is kept separate">
+        <?php foreach ($cvFolds as $r => $fold): ?>
+        <div class="cv-row">
+            <span class="cv-label">Round <?= (int)$fold['fold'] ?></span>
+            <div class="cv-blocks">
+                <?php for ($b = 0; $b < $k; $b++): ?>
+                <span class="cv-block <?= $b === $r ? 'cv-score-block' : 'cv-train-block' ?>"><?= $b === $r ? 'Score' : 'Train' ?></span>
+                <?php endfor; ?>
+            </div>
+            <span class="cv-result small-text">
+                <?php foreach ($cvModels as $model => $cv): ?>
+                <?= e($model === 'Logistic regression' ? 'LR' : ($model === 'Random forest' ? 'RF' : $model)) ?>
+                <?= number_format((float)$cv['folds'][$r], 2) ?>&nbsp;
+                <?php endforeach; ?>
+            </span>
+        </div>
+        <?php endforeach; ?>
+        <div class="cv-row">
+            <span class="cv-label">Final test</span>
+            <div class="cv-blocks">
+                <span class="cv-block cv-test-block">Test set: <?= (int)$t['n_test_patients'] ?> patients, locked until the end</span>
+            </div>
+            <span class="cv-result small-text">LR <?= number_format((float)$t['macro_f1'], 2) ?></span>
+        </div>
+    </div>
+
+    <!-- Chart: proves the folds are stratified (each bar has the same mix) -->
+    <h3>Cancer-type mix in each scoring fold</h3>
+    <div id="chart-test-folds" class="chart-slot" role="img"
+         aria-label="Share of each cancer type in every scoring fold; all folds have nearly the same mix">
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th scope="col">Fold</th>
+                    <?php foreach ($types as $c): ?>
+                    <th scope="col"><?= e($c) ?></th>
+                    <?php endforeach; ?>
+                    <th scope="col">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($cvFolds as $fold): ?>
+                <tr>
+                    <th scope="row">Fold <?= (int)$fold['fold'] ?></th>
+                    <?php foreach ($types as $c): ?>
+                    <td class="num"><?= (int)($fold['val_mix'][$c] ?? 0) ?></td>
+                    <?php endforeach; ?>
+                    <td class="num"><?= (int)$fold['n_val'] ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php endif; ?>
+
+    <!-- ROC curves: one line per cancer type, AUC in the legend -->
+    <h3>ROC curves (one cancer type vs the rest)</h3>
+    <div id="chart-test-roc" class="chart-slot" role="img"
+         aria-label="ROC curve for each cancer type on the test set, with its AUC">
+        <p class="muted small-text">AUC: <?php foreach ($t['auc'] as $c => $a): ?><?= e($c) ?> <?= number_format((float)$a, 2) ?> · <?php endforeach; ?></p>
+    </div>
+
+    <!-- Only the parts the charts need. JSON_HEX_TAG stops "</script>" in the data from breaking the page. -->
+    <script type="application/json" id="chart-test-data"><?= json_encode(
+        [
+            'per_type'         => $t['per_type'],
+            'cross_validation' => $t['cross_validation'],
+            'roc'              => $t['roc'],
+            'auc'              => $t['auc'],
+            'cv_folds'         => $t['cv_folds'] ?? [],
+            'cancer_types'     => $t['cancer_types'],
+        ],
+        JSON_HEX_TAG | JSON_HEX_AMP
+    ) ?></script>
+    <?php endif; ?>
+</section>
+
+
+<h2>Live use: compared with released reports</h2>
+
+<!--  Filters-->
 <form class="filters" method="get" action="">
     <div class="field">
         <label for="version">Model version</label>
@@ -95,10 +341,8 @@ require __DIR__ . '/../../includes/header.php';
     <a class="btn" href="model-performance.php">Clear</a>
 </form>
 
-<!-- ===================================================================
-     2. Headline tiles. Each accuracy shows its n underneath, because
-     "90%" of 10 cases means much less than 90% of 200.
-     =================================================================== -->
+<!--2. Headline tiles. Each accuracy shows its n underneath, because
+     "90%" of 10 cases means much less than 90% of 200. -->
 <div class="tiles">
     <div class="tile">
         <span class="tile-value">—</span>
@@ -120,9 +364,7 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<!-- ===================================================================
-     3. Confusion matrix
-     =================================================================== -->
+<!-- 3. Confusion matrix -->
 <section class="card" aria-labelledby="confusion-heading">
     <div class="card-header">
         <h2 id="confusion-heading">Model Diagnosis Accuracy</h2>
@@ -171,9 +413,7 @@ require __DIR__ . '/../../includes/header.php';
     ) ?></script>
 </section>
 
-<!-- ===================================================================
-     4 + 5. Accuracy by version and by cancer type, side by side
-     =================================================================== -->
+<!--  Accuracy by version and by cancer type, side by side -->
 <div class="grid-2">
 
     <section class="card" aria-labelledby="version-heading">
@@ -253,9 +493,7 @@ require __DIR__ . '/../../includes/header.php';
     </section>
 </div>
 
-<!-- ===================================================================
-     6 + 7. Confidence check and feedback summary
-     =================================================================== -->
+<!--  Confidence check and feedback summary -->
 <div class="grid-2">
 
     <section class="card" aria-labelledby="calibration-heading">

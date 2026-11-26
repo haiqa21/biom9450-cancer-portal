@@ -23,6 +23,11 @@
     --cancer-prostate: #EDA100;
     --cancer-blood: #E87BA4;
     --cancer-pancreas: #008300;
+    --cancer-colorectal: #eb6834;
+    --cancer-melanoma: #1baf7a;
+    --cancer-glioma:#eda100;
+    --cancer-thyroid:#e87ba4;
+    --cancer-kidney: #008300;
 }
 
 /* App shell: header and side nav stay put; only <main> scrolls */
@@ -276,6 +281,11 @@ a:hover { color: var(--primary-hover); }
 .dot-prostate { background: var(--cancer-prostate); }
 .dot-blood    { background: var(--cancer-blood); }
 .dot-pancreas { background: var(--cancer-pancreas); }
+.dot-colorectal { background: var(--cancer-colorectal); }
+.dot-melanoma   { background: var(--cancer-melanoma); }
+.dot-glioma     { background: var(--cancer-glioma); }
+.dot-thyroid    { background: var(--cancer-thyroid); }
+.dot-kidney     { background: var(--cancer-kidney); }
 
 /* tables */
 .table-wrap { overflow-x: auto; }

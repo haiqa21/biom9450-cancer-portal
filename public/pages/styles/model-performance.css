@@ -53,3 +53,35 @@
 
 /* Row headers are <th>, so keep the hover tint off them */
 .confusion-table tbody tr:hover th { background: transparent; }
+
+/* Confusion matrix heatmap: darker = bigger share of the row (--pct is set by PHP) */
+.heatmap td.heat {
+    background: color-mix(in srgb, #0B7FA8 calc(var(--pct) * 1%), #FFFFFF);
+    text-align: center;
+}
+.heatmap td.heat-strong {
+    color: #FFFFFF;
+}
+.heatmap td.diagonal {
+    outline: 2px solid #0F1B2A;
+    outline-offset: -2px;
+}
+.chart-slot { margin-bottom: 12px; }
+
+.cv-diagram { display: flex;flex-direction: column; gap: 6px; margin: 8px 0 16px; }
+.cv-row { display: grid; grid-template-columns: 90px 1fr 130px; align-items: center; gap: 8px; }
+.cv-label { font-weight: 600; font-size: 0.85rem; }
+.cv-blocks { display:flex; gap: 3px; }
+.cv-block{
+    padding: 6px 4px;
+    border-radius: 4px;
+    font: size 0.75rem;
+    text-align: right;
+}
+.cv-train-block { background: #dcebf2; color: #0F1B2A;}
+.cv-score-block{ background: #0B7FA8; color: #FFFFFF; font-weight: 600;}
+.cv-test-block { background: white; color: #0F1B2A; border: 2px dashed #c0601c; font-weight: 600;}
+@media (max-width: 600px) {
+    .cv-row{grid-template-columns: 1fr;}
+
+}
