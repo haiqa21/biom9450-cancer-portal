@@ -18,14 +18,14 @@ $currentUser = ['user_id' => 0, 'name' => 'Dr Placeholder', 'role' => 'researche
 $pageTitle  = 'Dashboard';                     // browser tab: "Dashboard | CancerInsight"
 $activePage = 'researcher-dashboard';          // highlights "Dashboard" in the side nav
 $pageStyles = ['researcher-dashboard.css'];    // stylesheet
-
+$pageScripts = ['chart.umd.min.js', 'researcher-dashboard.js']; //
 // ---------------------------------------------------------------------------
 // Fixed lists
 // ---------------------------------------------------------------------------
 
 // The six cancer types in the one order every chart and legend uses.
 // TODO: are there more types in the database? If so, add them here and to the legend in the gene chart.
-$cancerTypes = ['Breast', 'Brain', 'Liver', 'Prostate', 'Blood', 'Pancreas'];
+$cancerTypes = ['Breast','Colorectal','Melanoma','Glioma','Thyroid','Kidney'];
 
 // The five prediction statuses in workflow order: value stored in
 // predictions.status => label shown to people. Used by the pipeline chart and
@@ -40,7 +40,7 @@ $statuses = [
 
 // Genes offered in the gene picker.
 // TODO: replace with the most frequently mutated named genes from database
-$geneOptions = ['TP53', 'KRAS', 'PIK3CA', 'BRCA1', 'BRCA2', 'EGFR', 'APC', 'PTEN', 'IDH1', 'JAK2'];
+$geneOptions = ['TP53', 'KRAS', 'PIK3CA', 'BRCA1', 'BRCA2', 'EGFR', 'APC', 'PTEN', 'IDH1', 'JAK2', 'BRAF', 'VHL'];
 
 // ---------------------------------------------------------------------------
 // Read the GET parameters (filters, picked genes, page numbers)
@@ -53,6 +53,42 @@ if (isset($_GET['genes'])) {
     $selectedGenes = array_values(array_intersect((array)$_GET['genes'], $geneOptions));
 } else {
     $selectedGenes = array_slice($geneOptions, 0, 8);
+}
+// Gene chart data: patients with a mutation in each selected gene, per cancer type
+// Start with 0 for every gene and cancer type, so missing combinations show as 0
+$geneCounts = array_fill_keys($selectedGenes, array_fill_keys($cancerTypes, 0));
+$geneChartError = false;
+
+    //Once the schema has a research-consent column, count consenting patients only.
+    if ($selectedGenes) {
+    // One "?" per selected gene, e.g. "?, ?, ?" for three genes
+    $placeholders = implode(', ', array_fill(0, count($selectedGenes), '?'));
+    try {
+        require_once __DIR__ . '/../../includes/db.php';   // gives us $pdo; inside try so a failed connection is caught
+        $stmt = $pdo->prepare(
+            "SELECT g.gene_symbol, ct.cancer_name, COUNT(DISTINCT s.patient_id) AS patients
+             FROM genes g
+             JOIN mutations m          ON m.gene_id = g.gene_id
+             JOIN patient_mutations pm ON pm.mutation_id = m.mutation_id
+             JOIN samples s            ON s.sample_id = pm.sample_id
+             JOIN sample_diagnoses sd  ON sd.sample_id = s.sample_id
+             JOIN patient_diagnoses pd ON pd.diagnosis_id = sd.diagnosis_id
+             JOIN cancer_types ct      ON ct.cancer_type_id = pd.cancer_type_id
+             WHERE g.gene_symbol IN ($placeholders)
+             GROUP BY g.gene_symbol, ct.cancer_name"
+        );
+        $stmt->execute($selectedGenes);   // the gene names go in here, never into the SQL text
+
+        foreach ($stmt->fetchAll() as $row) {
+            // Only fill types that are on the chart; anything else in the database is ignored
+            if (isset($geneCounts[$row['gene_symbol']][$row['cancer_name']])) {
+                $geneCounts[$row['gene_symbol']][$row['cancer_name']] = (int)$row['patients'];
+            }
+        }
+    } catch (PDOException $e) {
+        error_log('Gene chart query failed: ' . $e->getMessage());   // for developers only
+        $geneChartError = true;                                      // the page shows a friendly note
+    }
 }
 
 // Patients table filters and page number
@@ -257,11 +293,21 @@ require __DIR__ . '/../../includes/header.php';
 
     <!-- Legend: decorative because the fallback rows and the chart's own
          tooltips name each cancer type too -->
-    <div class="legend" aria-hidden="true">
+    <fieldset class="gene-picker type-picker">
+        <legend>Cancer types</legend>
         <?php foreach ($cancerTypes as $c): ?>
-        <span><span class="dot dot-<?= e(strtolower($c)) ?>"></span><?= e($c) ?></span>
+        <label>
+            <input type="checkbox" class="type-toggle" value="<?= e($c) ?>" checked>
+            <span class="dot dot-<?= e(strtolower($c)) ?>" aria-hidden="true"></span>
+            <?= e($c) ?>
+        </label>
         <?php endforeach; ?>
-    </div>
+    </fieldset>
+    <p class="muted" id="type-empty" hidden>Select at least one cancer type.</p>
+
+    <?php if ($geneChartError): ?>
+        <p class="muted">Gene counts aren't available right now. Please try again later.</p>
+    <?php endif; ?>
 
     <div id="chart-genes" class="chart-slot" role="img"
          aria-label="Number of patients with a mutation in each selected gene, split by cancer type">
@@ -285,7 +331,7 @@ require __DIR__ . '/../../includes/header.php';
         [
             'cancer_types' => $cancerTypes,
             // gene => [cancer type => patient count]
-            'genes' => array_fill_keys($selectedGenes, array_fill_keys($cancerTypes, 0)),
+            'genes' => $geneCounts,
         ],
         JSON_HEX_TAG | JSON_HEX_AMP
     ) ?></script>

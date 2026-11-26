@@ -1,0 +1,3 @@
+
+SHOW tables;
+DESCRIBE mutations;

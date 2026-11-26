@@ -13,17 +13,27 @@ $currentUser = ['user_id' => 0, 'name' => 'Dr Placeholder', 'role' => 'researche
 $pageTitle   = 'Prediction';
 $activePage  = 'research-predictions';        // keeps "Predictions" highlighted in the side nav
 $pageStyles  = ['research-prediction.css'];
-$pageScripts = ['research-prediction.js'];    // feedback form niceties; the form works without it
+$pageScripts = ['chart.umd.min.js', 'prediction-charts.js', 'research-prediction.js'];   // charts + feedback form nicetie
 
 // ---------------------------------------------------------------------------
 // Which prediction?
 // ---------------------------------------------------------------------------
 $predictionId = (int)($_GET['id'] ?? 0);
 
-// TODO: prediction query. No row when the id is
-// unknown, the patient hasn't consented, or status = 'awaiting_diagnosis'
-// (nothing to compare yet) -> not available.
-$predictionFound = $predictionId > 0;
+// Load the saved prediction: null when the id is unknown or the patient
+// hasn't agreed to AI use (load_prediction_view() checks ai_consent).
+// TODO: also treat status = 'awaiting_diagnosis' as not available, once predictions.status exists.
+$view = null;
+if ($predictionId > 0) {
+    try {
+        require_once __DIR__ . '/../../includes/db.php';
+        require_once __DIR__ . '/../../includes/prediction-view.php';
+        $view = load_prediction_view($pdo, $predictionId);
+    } catch (PDOException $e) {
+        error_log('Prediction page query failed: ' . $e->getMessage());   // for developers only
+    }
+}
+$predictionFound = $view !== null;
 
 // ---------------------------------------------------------------------------
 // Messages handed back by feedback-save.php
@@ -89,7 +99,7 @@ require __DIR__ . '/../../includes/header.php';
         <div class="heading-chips">
             <!-- TODO: status chip from predictions.status; model version -->
             <span class="chip status-reviewed"><?= e(PREDICTION_STATUSES['reviewed']) ?></span>
-            <span class="chip">Model —</span>
+            <span class="chip">Model <?= e($view['model_used']) ?></span>
         </div>
     </div>
     <!-- Work through the queue: oldest prediction without my feedback, other than this one.
@@ -116,10 +126,10 @@ require __DIR__ . '/../../includes/header.php';
 
     <section class="stage" aria-labelledby="stage-2">
         <h2 id="stage-2" class="stage-label">2 · Model</h2>
-        <p class="stage-main">— <span class="muted">(—%)</span></p>
+        <p class="stage-main"><?= e($view['top_type']) ?> <span class="muted">(<?= round($view['confidence'] * 100) ?>%)</span></p>
         <dl class="stage-details">
-            <div><dt>Model version</dt><dd>—</dd></div>
-            <div><dt>Run</dt><dd>—</dd></div>
+            <div><dt>Model version</dt><dd><?= e($view['model_used']) ?></dd></div>
+            <div><dt>Run</dt><dd><?= e($view['created_at']) ?></dd></div>
         </dl>
     </section>
 
@@ -140,9 +150,23 @@ require __DIR__ . '/../../includes/header.php';
     </section>
 </div>
 
-<!-- ===================================================================
-     3 + 4. Charts
-     =================================================================== -->
+
+<!-- Confidence flag + limitations: shown with every prediction -->
+<?php if ($view['uncertain']): ?>
+<p class="notice notice-warning" role="status">
+    <strong>Low confidence.</strong>
+    The model is <?= round($view['confidence'] * 100) ?>% sure, below its <?= round($view['threshold'] * 100) ?>% threshold.
+    On test patients, predictions this unsure were right only about half the time. Interpret with caution.
+</p>
+<?php endif; ?>
+
+<aside class="notice notice-info" aria-label="Limitations of the model">
+    <strong>Decision support only, not a diagnosis.</strong>
+    Evaluated on held-out TCGA research patients (78% accurate), not clinically validated.
+    It only knows 6 cancer types and uses gene mutations only. A diagnosis must be confirmed by pathology.
+</aside>
+
+
 <div class="grid-2">
 
     <!-- 3. Probabilities for all six cancer types, highest first.
@@ -163,12 +187,12 @@ require __DIR__ . '/../../includes/header.php';
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- TODO: from prediction_probabilities, ORDER BY probability DESC.
-                             "Marked" says Doctor and/or Report on the matching rows. -->
-                        <?php foreach (CANCER_TYPES as $c): ?>
+                        <!-- Highest first (load_prediction_view() sorts them).
+                        TODO: "Marked" says Doctor and/or Report once those are saved. -->
+                        <?php foreach ($view['probabilities'] as $c => $p): ?>
                         <tr>
                             <td><span class="cancer-name"><span class="dot dot-<?= e(strtolower($c)) ?>" aria-hidden="true"></span><?= e($c) ?></span></td>
-                            <td class="num">—</td>
+                            <td class="num"><?= number_format($p * 100, 1) ?>%</td>
                             <td></td>
                         </tr>
                         <?php endforeach; ?>
@@ -179,10 +203,11 @@ require __DIR__ . '/../../includes/header.php';
         <!-- Shape: {"cancer_types":[...],"probabilities":{"Breast":62.1,...},"doctor":"Breast","report":null} -->
         <script type="application/json" id="chart-probabilities-data"><?= json_encode(
             [
-                'cancer_types'  => CANCER_TYPES,
-                'probabilities' => array_fill_keys(CANCER_TYPES, null),
-                'doctor'        => null,
-                'report'        => null,   // stays null until the report is released
+            'cancer_types'  => array_keys($view['probabilities']),
+            'probabilities' => array_map(fn($p) => round($p * 100, 1), $view['probabilities']),   // in %
+            'threshold'     => round($view['threshold'] * 100),                                   // e.g. 60
+            'doctor'        => null,   // TODO: the doctor's initial diagnosis, once saved
+            'report'        => null,   // stays null until the report is released
             ],
             JSON_HEX_TAG | JSON_HEX_AMP
         ) ?></script>
@@ -205,22 +230,25 @@ require __DIR__ . '/../../includes/header.php';
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- TODO: from prediction_genes, ORDER BY weight DESC LIMIT 10.
-                             No rows: "Gene weights aren't available for this model version." -->
-                        <?php for ($i = 0; $i < 3; $i++): ?>
+                        <!-- The patient's genes that pushed the top type up come first,
+                             then the strongest other genes; 10 in total -->
+                        <?php foreach ($view['genes'] as $g): ?>
                         <tr>
-                            <td><span class="gene">—</span></td>
-                            <td class="num">—</td>
-                            <td class="num">—</td>
+                            <td><span class="gene"><?= e($g['gene']) ?></span></td>
+                            <td class="num"><?= number_format((float)$g['weight'], 3) ?></td>
+                            <td><?= $g['in_sample'] ? 'Yes' : 'No' ?></td>
                         </tr>
-                        <?php endfor; ?>
+                        <?php endforeach; ?>
+                        <?php if (!$view['genes']): ?>
+                        <tr><td colspan="3" class="empty">Gene weights aren't available for this model version.</td></tr>
+                    <?php endif; ?>
                     </tbody>
                 </table>
             </div>
         </div>
         <!-- Shape: {"genes":[{"gene":"TP53","weight":0.18,"in_sample":true}, ...]} -->
         <script type="application/json" id="chart-prediction-genes-data"><?= json_encode(
-            ['genes' => []],
+            ['genes' => $view['genes'], 'top_type' => $view['top_type']],
             JSON_HEX_TAG | JSON_HEX_AMP
         ) ?></script>
     </section>
