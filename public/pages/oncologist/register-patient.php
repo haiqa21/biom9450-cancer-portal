@@ -351,10 +351,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <title>CancerInsight | Register Patient</title>
-
-    <link rel="stylesheet" href="../style/app.css">
-    <link rel="stylesheet" href="../style/oncologist/TCGA.css">
-    <link rel="stylesheet" href="../style/oncologist/dashboard.css">
 </head>
 
 <body>
