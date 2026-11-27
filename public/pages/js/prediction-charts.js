@@ -12,11 +12,23 @@ document.addEventListener('DOMContentLoaded', () => {
         .getPropertyValue('--text-body').trim() || '#2B3A4A';
 
 
-        // a cancer type's color from the css variable 
-        function colourFor(type) {
-        const colour = getComputedStyle(document.documentElement)
-            .getPropertyValue('--cancer-' + type.toLowerCase()).trim();
-        return colour || '#396797';
+    // Keep chart colors in hex: Safari may return color(srgb ...) from computed
+    // styles, which Chart.js does not reliably parse.
+    const cancerColours = {
+        breast: '#2A78D6',
+        brain: '#EB6834',
+        liver: '#1BAF7A',
+        prostate: '#EDA100',
+        blood: '#E87BA4',
+        pancreas: '#008300',
+        colorectal: '#eb6834',
+        melanoma: '#1baf7a',
+        glioma: '#eda100',
+        thyroid: '#e87ba4',
+        kidney: '#008300'
+    };
+    function colourFor(type) {
+        return cancerColours[type.toLowerCase()] || '#9AA5B1';
     }
     // Read a data block; null if it's missing 
     function readData(id){
@@ -75,6 +87,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
+
+         const colours = types.map(colourFor);   // read the dot colours before the table is replaced
          const canvas = makeCanvas('chart-probabilities', types.length * 40 + 60);
         if (canvas) {
             new Chart(canvas, {
@@ -84,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     datasets: [{
                         label: 'Probability (%)',
                         data: types.map(type => probs.probabilities[type]),
-                        backgroundColor: types.map(colourFor),
+                        backgroundColor: colours,
                         borderRadius: 4
                     }]
                      },
@@ -105,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const genes = readData('chart-prediction-genes-data');
     if(genes && genes.genes.length){
         const rows = genes.genes;
-        const canvas = makeCanvas('chart-prediction-genes'. rows.length * 30 + 80);
+        const canvas = makeCanvas('chart-prediction-genes', rows.length * 30 + 80);
         if (canvas){
             new Chart(canvas, {
                 type: 'bar',
@@ -116,14 +130,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     datasets:[
                         {label: 'Mutated in this patient',
                             data: rows.map(r => r.in_sample ? r.weight : null),
-                            backgroundColor: 'blue',
+                            backgroundColor: '#0B7FA8', //mutaed in this 
                             borderRadius: 5
 
                         },
                         {
                             label: 'Not mutated in this patient',
                             data: rows.map(r => r.in_sample ? null : r.weight),
-                            backgroundColor: 'green',
+                            backgroundColor: '#C9D3DD', //not mutated in this 
                             borderRadius: 4
                         }
                 

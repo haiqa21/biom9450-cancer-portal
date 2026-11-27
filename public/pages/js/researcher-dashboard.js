@@ -49,24 +49,20 @@ const textColour = getComputedStyle(document.documentElement).getPropertyValue('
 Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
 Chart.defaults.color = textColour;
 
-// One coloured piece per cancer type, coloured like its legend dot
-// Find a cancer type's colour from the page's CSS, in a form the chart can always draw
+// Keep chart colors in hex so Safari and Chart.js handle them consistently.
+//Same values as the cancer colours in app.css; changed both
+const cancerColours = {
+    breast: '#2A78D6',
+    colorectal: '#eb6834',
+    melanoma: '#1baf7a',
+    glioma: '#eda100',
+    thyroid: '#e87ba4',
+    kidney: '#008300'
+};
+
+// One colored piece per cancer type, matching the site's legend palette.
 function colourFor(type) {
-    const dot = document.querySelector('.type-picker .dot-' + type.toLowerCase());
-    if (!dot) {
-        return '#9AA5B1';                       // grey if this type has no dot on the page
-    }
-    // 1. The CSS variable, e.g. --cancer-glioma (found wherever it is defined)
-    let colour = getComputedStyle(dot).getPropertyValue('--cancer-' + type.toLowerCase()).trim();
-    // 2. If there is no variable, use the colour the dot actually shows
-    if (!colour) {
-        colour = getComputedStyle(dot).backgroundColor;
-    }
-    // 3. Let a tiny canvas convert any colour format into one Chart.js can draw
-    const ctx = document.createElement('canvas').getContext('2d');
-    ctx.fillStyle = '#9AA5B1';                  // stays grey if the colour can't be used
-    ctx.fillStyle = colour;
-    return ctx.fillStyle;
+    return cancerColours[type.toLowerCase()] || '#9AA5B1';
 }
 
 // One coloured piece per cancer type
