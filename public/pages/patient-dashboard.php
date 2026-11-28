@@ -113,48 +113,6 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 
 <div class="grid-2">
-    <section class="card" aria-labelledby="diagnosis-heading">
-        <div class="card-header">
-            <h2 id="diagnosis-heading">Your diagnosis</h2>
-            <?php if ($latestDiagnosis): ?>
-            <span class="chip <?= $latestDiagnosis['status'] === 'active' ? 'chip-success' : '' ?>">
-                <?= $latestDiagnosis['status'] === 'active' ? 'Active treatment' : 'In remission' ?>
-            </span>
-            <?php endif; ?>
-        </div>
-
-        <?php if ($latestDiagnosis): ?>
-        <dl class="details">
-            <div>
-                <dt>Cancer type</dt>
-                <dd class="cancer-type">
-                    <span class="dot dot-<?= e(strtolower($latestDiagnosis['cancer_name'])) ?>" aria-hidden="true"></span>
-                    <?= e($latestDiagnosis['cancer_name']) ?>
-                </dd>
-            </div>
-            <div>
-                <dt>Stage</dt>
-                <dd><?= e($stageLabel($latestDiagnosis['stage'])) ?></dd>
-            </div>
-            <div>
-                <dt>Diagnosed</dt>
-                <dd><?= e(format_date($latestDiagnosis['date_of_diagnosis'])) ?></dd>
-            </div>
-        </dl>
-
-        <?php if ($earlierDiagnoses): ?>
-        <h3 class="sub-heading">Earlier diagnoses</h3>
-        <ul class="plain-list">
-            <?php foreach ($earlierDiagnoses as $d): ?>
-            <li><?= e($d['cancer_name']) ?>, <?= e(strtolower($stageLabel($d['stage']))) ?>, <?= e(format_date($d['date_of_diagnosis'])) ?></li>
-            <?php endforeach; ?>
-        </ul>
-        <?php endif; ?>
-
-        <?php else: ?>
-        <p class="muted">No diagnosis has been recorded yet.</p>
-        <?php endif; ?>
-    </section>
 
     <section class="card" aria-labelledby="details-heading">
         <div class="card-header">

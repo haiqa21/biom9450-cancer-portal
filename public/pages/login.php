@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = $stmt ? $stmt->fetch() : false;
 
     // Check whether the user exists and their password is correct
-    if ($user && password_verify($password, $user['password'])) {
+    if ($user && password_verify($password, $user['password_hash'])) {
 
         $_SESSION['user_id'] = $user['user_id'];
         $_SESSION['role'] = $user['role'];

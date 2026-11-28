@@ -61,7 +61,8 @@ $pageScripts = $pageScripts ?? [];
 // Side navigation for each role: [page file without .php, label, icon]
 $navItems = [
     'patient' => [
-        ['patient-dashboard', 'My results', 'user'],
+        ['patient-dashboard', 'Patient overview', 'home'],
+        ['results', 'My results', 'user'],
         ['doctors', 'Find a doctor', 'stethoscope'],
         ['records', 'My records', 'file'],
     ],

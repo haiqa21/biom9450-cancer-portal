@@ -1,6 +1,17 @@
 <?php
 session_start();
 require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/helpers.php'; 
+
+
+
+// --
+// Settings read by includes/header.php
+// --- 
+$pageTitle = 'Doctors';
+$activePage = 'doctors';
+$pageStyles = ['research-doctors.css'];
+
 
 if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'patient') {
     header('Location: login.php');
