@@ -6,7 +6,6 @@ require_once __DIR__ . '/../../includes/db.php';
 // =====================================================
 // AUTHENTICATION
 // =====================================================
-
 if (
     !isset($_SESSION['user_id'], $_SESSION['role']) ||
     $_SESSION['role'] !== 'oncologist'
@@ -17,112 +16,98 @@ if (
 
 $user_id = (int) $_SESSION['user_id'];
 
-
 // =====================================================
 // CSRF VALIDATION
 // =====================================================
-
 if (
     $_SERVER['REQUEST_METHOD'] !== 'POST' ||
     !isset($_POST['csrf'], $_SESSION['csrf']) ||
+    !is_string($_POST['csrf']) ||
     !hash_equals($_SESSION['csrf'], $_POST['csrf'])
 ) {
     http_response_code(403);
     exit('Invalid request.');
 }
 
-
 // =====================================================
 // HELPERS
 // =====================================================
-
-function redirectDashboard() {
+function redirectDashboard(): void {
     header('Location: oncologist-dashboard.php');
     exit;
 }
 
-function getPost($key) {
-    return trim($_POST[$key] ?? '');
+function getPost(string $key): string {
+    $value = $_POST[$key] ?? '';
+    return is_string($value) ? trim($value) : '';
 }
 
-function getPatientId() {
-    $id = getPost('patient_id');
+function getPositiveId(string $key): int {
+    $value = getPost($key);
+    if ($value === '' || !ctype_digit($value) || (int)$value <= 0) {
+        throw new Exception('Invalid ID.');
+    }
+    return (int)$value;
+}
 
-    if ($id === '') {
+function getPatientId(): ?int {
+    $value = getPost('patient_id');
+    if ($value === '') {
         return null;
     }
-
-    if (!ctype_digit($id) || (int)$id <= 0) {
+    if (!ctype_digit($value) || (int)$value <= 0) {
         throw new Exception('Invalid patient selection.');
     }
-
-    return (int)$id;
+    return (int)$value;
 }
 
-function validatePatient(PDO $pdo, $patient_id) {
-
+// Patient IDs may only be used if the patient is assigned to this oncologist.
+function validateAssignedPatient(PDO $pdo, int $user_id, ?int $patient_id): void {
     if ($patient_id === null) {
-        return;
+        return; // Unlinked task/appointment is permitted.
     }
 
     $stmt = $pdo->prepare(
-        "SELECT patient_id
-         FROM patients
-         WHERE patient_id = ?"
+        "SELECT 1
+         FROM oncologist_patients
+         WHERE user_id = ? AND patient_id = ?
+         LIMIT 1"
     );
-
-    $stmt->execute([$patient_id]);
+    $stmt->execute([$user_id, $patient_id]);
 
     if (!$stmt->fetchColumn()) {
-        throw new Exception('Patient not found.');
+        throw new Exception('Patient not found in your assigned caseload.');
     }
 }
 
 function logActivity(
     PDO $pdo,
-    $user_id,
-    $action,
-    $entity_type,
-    $entity_id,
-    $details = ''
-) {
+    int $user_id,
+    string $action,
+    string $entity_type,
+    int $entity_id,
+    string $details = ''
+): void {
     try {
-
-        $stmt = $pdo->prepare("
-            INSERT INTO audit_logs
-            (user_id, action, entity_type, entity_id, details)
-            VALUES (?, ?, ?, ?, ?)
-        ");
-
-        $stmt->execute([
-            $user_id,
-            $action,
-            $entity_type,
-            $entity_id,
-            $details
-        ]);
-
+        $stmt = $pdo->prepare(
+            "INSERT INTO audit_logs
+             (user_id, action, entity_type, entity_id, details)
+             VALUES (?, ?, ?, ?, ?)"
+        );
+        $stmt->execute([$user_id, $action, $entity_type, $entity_id, $details]);
     } catch (Throwable $e) {
-
-        // Audit logging must not break the main action.
-        // The activity may not be recorded if this insert fails.
-
+        // Audit logging failure should not prevent the underlying action.
     }
 }
 
-function validateDateTime($value) {
-
+function validateDateTime(string $value): ?string {
     if ($value === '') {
         return null;
     }
 
-    // HTML datetime-local format: YYYY-MM-DDTHH:MM
+    // HTML datetime-local input format: YYYY-MM-DDTHH:MM
     $value = str_replace('T', ' ', $value);
-
-    $date = DateTime::createFromFormat(
-        'Y-m-d H:i',
-        $value
-    );
+    $date = DateTime::createFromFormat('Y-m-d H:i', $value);
 
     if (!$date || $date->format('Y-m-d H:i') !== $value) {
         throw new Exception('Invalid date or time.');
@@ -131,21 +116,16 @@ function validateDateTime($value) {
     return $value . ':00';
 }
 
-
 // =====================================================
-// ACTION
+// ACTION HANDLING
 // =====================================================
-
 $action = getPost('action');
 
 try {
-
-    // =================================================
+    // -------------------------------------------------
     // TASK: ADD
-    // =================================================
-
+    // -------------------------------------------------
     if ($action === 'task_add') {
-
         $title = getPost('title');
         $description = getPost('description');
         $due_date = validateDateTime(getPost('due_date'));
@@ -154,328 +134,84 @@ try {
         if ($title === '') {
             throw new Exception('Task title is required.');
         }
-
         if (strlen($title) > 255) {
             throw new Exception('Task title is too long.');
         }
 
-        validatePatient($pdo, $patient_id);
+        validateAssignedPatient($pdo, $user_id, $patient_id);
 
-        $stmt = $pdo->prepare("
-            INSERT INTO oncologist_tasks
-            (
-                user_id,
-                patient_id,
-                task_title,
-                task_description,
-                due_date
-            )
-            VALUES (?, ?, ?, ?, ?)
-        ");
-
-        $stmt->execute([
-            $user_id,
-            $patient_id,
-            $title,
-            $description ?: null,
-            $due_date
-        ]);
-
-        $task_id = $pdo->lastInsertId();
-
-        logActivity(
-            $pdo,
-            $user_id,
-            'task_created',
-            'task',
-            $task_id,
-            $title
+        $stmt = $pdo->prepare(
+            "INSERT INTO oncologist_tasks
+             (user_id, patient_id, task_title, task_description, due_date)
+             VALUES (?, ?, ?, ?, ?)"
         );
+        $stmt->execute([$user_id, $patient_id, $title, $description ?: null, $due_date]);
 
+        $task_id = (int)$pdo->lastInsertId();
+        logActivity($pdo, $user_id, 'task_created', 'task', $task_id, $title);
         $_SESSION['flash'] = 'Task created successfully.';
-
         redirectDashboard();
     }
 
-
-    // =================================================
+    // -------------------------------------------------
     // TASK: TOGGLE STATUS
-    // =================================================
-
+    // -------------------------------------------------
     if ($action === 'task_toggle') {
-
-        $id = getPost('id');
+        $id = getPositiveId('id');
         $status = getPost('status');
 
-        if (
-            !ctype_digit($id) ||
-            !in_array($status, ['pending', 'completed'], true)
-        ) {
+        if (!in_array($status, ['pending', 'completed'], true)) {
             throw new Exception('Invalid task request.');
         }
 
-        $stmt = $pdo->prepare("
-            UPDATE oncologist_tasks
-            SET task_status = ?
-            WHERE task_id = ?
-            AND user_id = ?
-        ");
-
-        $stmt->execute([
-            $status,
-            (int)$id,
-            $user_id
-        ]);
-
-        logActivity(
-            $pdo,
-            $user_id,
-            'task_status_changed',
-            'task',
-            (int)$id,
-            $status
+        $stmt = $pdo->prepare(
+            "UPDATE oncologist_tasks
+             SET task_status = ?
+             WHERE task_id = ? AND user_id = ?"
         );
+        $stmt->execute([$status, $id, $user_id]);
 
+        if ($stmt->rowCount() === 0) {
+            // Distinguish an unchanged row from an invalid/foreign task.
+            $check = $pdo->prepare(
+                "SELECT 1 FROM oncologist_tasks WHERE task_id = ? AND user_id = ?"
+            );
+            $check->execute([$id, $user_id]);
+            if (!$check->fetchColumn()) {
+                throw new Exception('Task not found.');
+            }
+        }
+
+        logActivity($pdo, $user_id, 'task_status_changed', 'task', $id, $status);
         $_SESSION['flash'] = 'Task status updated.';
-
         redirectDashboard();
     }
 
-
-    // =================================================
+    // -------------------------------------------------
     // TASK: DELETE
-    // =================================================
-
+    // -------------------------------------------------
     if ($action === 'task_delete') {
+        $id = getPositiveId('id');
 
-        $id = getPost('id');
+        $stmt = $pdo->prepare(
+            "DELETE FROM oncologist_tasks
+             WHERE task_id = ? AND user_id = ?"
+        );
+        $stmt->execute([$id, $user_id]);
 
-        if (!ctype_digit($id)) {
-            throw new Exception('Invalid task.');
+        if ($stmt->rowCount() === 0) {
+            throw new Exception('Task not found.');
         }
 
-        $stmt = $pdo->prepare("
-            DELETE FROM oncologist_tasks
-            WHERE task_id = ?
-            AND user_id = ?
-        ");
-
-        $stmt->execute([
-            (int)$id,
-            $user_id
-        ]);
-
-        logActivity(
-            $pdo,
-            $user_id,
-            'task_deleted',
-            'task',
-            (int)$id
-        );
-
+        logActivity($pdo, $user_id, 'task_deleted', 'task', $id);
         $_SESSION['flash'] = 'Task deleted.';
-
         redirectDashboard();
     }
 
-
-    // =================================================
-    // REVIEW: CREATE
-    // =================================================
-
-    if ($action === 'review_add') {
-
-        $patient_id = getPatientId();
-        $title = getPost('title');
-        $notes = getPost('notes');
-
-        if ($patient_id === null) {
-            throw new Exception('A patient must be selected.');
-        }
-
-        if ($title === '') {
-            throw new Exception('Review title is required.');
-        }
-
-        validatePatient($pdo, $patient_id);
-
-        $stmt = $pdo->prepare("
-            INSERT INTO oncologist_reviews
-            (
-                user_id,
-                patient_id,
-                review_title,
-                review_notes,
-                review_status
-            )
-            VALUES (?, ?, ?, ?, 'pending')
-        ");
-
-        $stmt->execute([
-            $user_id,
-            $patient_id,
-            $title,
-            $notes ?: null
-        ]);
-
-        $review_id = $pdo->lastInsertId();
-
-        logActivity(
-            $pdo,
-            $user_id,
-            'review_created',
-            'review',
-            $review_id,
-            $title
-        );
-
-        $_SESSION['flash'] = 'Review added to your queue.';
-
-        redirectDashboard();
-    }
-
-
-    // =================================================
-    // REVIEW: COMPLETE
-    // =================================================
-
-    if ($action === 'review_toggle') {
-
-        $id = getPost('id');
-        $status = getPost('status');
-
-        if (
-            !ctype_digit($id) ||
-            !in_array($status, ['pending', 'completed'], true)
-        ) {
-            throw new Exception('Invalid review request.');
-        }
-
-        $stmt = $pdo->prepare("
-            UPDATE oncologist_reviews
-            SET review_status = ?
-            WHERE review_id = ?
-            AND user_id = ?
-        ");
-
-        $stmt->execute([
-            $status,
-            (int)$id,
-            $user_id
-        ]);
-
-        logActivity(
-            $pdo,
-            $user_id,
-            'review_status_changed',
-            'review',
-            (int)$id,
-            $status
-        );
-
-        $_SESSION['flash'] = 'Review status updated.';
-
-        redirectDashboard();
-    }
-
-
-    // =================================================
-    // REPORT: CREATE DRAFT
-    // =================================================
-
-    if ($action === 'report_add') {
-
-        $title = getPost('title');
-        $summary = getPost('summary');
-        $patient_id = getPatientId();
-
-        if ($title === '') {
-            throw new Exception('Report title is required.');
-        }
-
-        validatePatient($pdo, $patient_id);
-
-        $stmt = $pdo->prepare("
-            INSERT INTO oncologist_reports
-            (
-                user_id,
-                patient_id,
-                report_title,
-                report_summary,
-                report_status
-            )
-            VALUES (?, ?, ?, ?, 'draft')
-        ");
-
-        $stmt->execute([
-            $user_id,
-            $patient_id,
-            $title,
-            $summary ?: null
-        ]);
-
-        $report_id = $pdo->lastInsertId();
-
-        logActivity(
-            $pdo,
-            $user_id,
-            'report_created',
-            'report',
-            $report_id,
-            $title
-        );
-
-        $_SESSION['flash'] = 'Report draft created.';
-
-        redirectDashboard();
-    }
-
-
-    // =================================================
-    // REPORT: RELEASE
-    // =================================================
-
-    if ($action === 'report_release') {
-
-        $id = getPost('id');
-
-        if (!ctype_digit($id)) {
-            throw new Exception('Invalid report.');
-        }
-
-        $stmt = $pdo->prepare("
-            UPDATE oncologist_reports
-            SET report_status = 'released'
-            WHERE report_id = ?
-            AND user_id = ?
-            AND report_status = 'draft'
-        ");
-
-        $stmt->execute([
-            (int)$id,
-            $user_id
-        ]);
-
-        logActivity(
-            $pdo,
-            $user_id,
-            'report_released',
-            'report',
-            (int)$id
-        );
-
-        $_SESSION['flash'] = 'Report marked as released.';
-
-        redirectDashboard();
-    }
-
-
-    // =================================================
+    // -------------------------------------------------
     // APPOINTMENT: CREATE
-    // =================================================
-
+    // -------------------------------------------------
     if ($action === 'appointment_add') {
-
         $title = getPost('title');
         $when = validateDateTime(getPost('when'));
         $patient_id = getPatientId();
@@ -485,101 +221,59 @@ try {
         if ($title === '') {
             throw new Exception('Appointment title is required.');
         }
-
+        if (strlen($title) > 255) {
+            throw new Exception('Appointment title is too long.');
+        }
         if ($when === null) {
             throw new Exception('Appointment date is required.');
         }
 
-        validatePatient($pdo, $patient_id);
+        validateAssignedPatient($pdo, $user_id, $patient_id);
 
-        $stmt = $pdo->prepare("
-            INSERT INTO oncologist_appointments
-            (
-                user_id,
-                patient_id,
-                appointment_title,
-                appointment_datetime,
-                location,
-                appointment_notes,
-                appointment_status
-            )
-            VALUES (?, ?, ?, ?, ?, ?, 'scheduled')
-        ");
-
-        $stmt->execute([
-            $user_id,
-            $patient_id,
-            $title,
-            $when,
-            $location ?: null,
-            $notes ?: null
-        ]);
-
-        $appointment_id = $pdo->lastInsertId();
-
-        logActivity(
-            $pdo,
-            $user_id,
-            'appointment_created',
-            'appointment',
-            $appointment_id,
-            $title
+        $stmt = $pdo->prepare(
+            "INSERT INTO oncologist_appointments
+             (user_id, patient_id, appointment_title, appointment_datetime,
+              location, appointment_notes, appointment_status)
+             VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
         );
+        $stmt->execute([$user_id, $patient_id, $title, $when, $location ?: null, $notes ?: null]);
 
+        $appointment_id = (int)$pdo->lastInsertId();
+        logActivity($pdo, $user_id, 'appointment_created', 'appointment', $appointment_id, $title);
         $_SESSION['flash'] = 'Appointment scheduled.';
-
         redirectDashboard();
     }
 
-
-    // =================================================
+    // -------------------------------------------------
     // APPOINTMENT: CANCEL
-    // =================================================
-
+    // -------------------------------------------------
     if ($action === 'appointment_cancel') {
+        $id = getPositiveId('id');
 
-        $id = getPost('id');
+        $stmt = $pdo->prepare(
+            "UPDATE oncologist_appointments
+             SET appointment_status = 'cancelled'
+             WHERE appointment_id = ?
+               AND user_id = ?
+               AND appointment_status = 'scheduled'"
+        );
+        $stmt->execute([$id, $user_id]);
 
-        if (!ctype_digit($id)) {
-            throw new Exception('Invalid appointment.');
+        if ($stmt->rowCount() === 0) {
+            throw new Exception('Scheduled appointment not found.');
         }
 
-        $stmt = $pdo->prepare("
-            UPDATE oncologist_appointments
-            SET appointment_status = 'cancelled'
-            WHERE appointment_id = ?
-            AND user_id = ?
-            AND appointment_status = 'scheduled'
-        ");
-
-        $stmt->execute([
-            (int)$id,
-            $user_id
-        ]);
-
-        logActivity(
-            $pdo,
-            $user_id,
-            'appointment_cancelled',
-            'appointment',
-            (int)$id
-        );
-
+        logActivity($pdo, $user_id, 'appointment_cancelled', 'appointment', $id);
         $_SESSION['flash'] = 'Appointment cancelled.';
-
         redirectDashboard();
     }
 
-
-    // =================================================
-    // UNKNOWN ACTION
-    // =================================================
-
-    throw new Exception('Unknown action.');
+    // Reviews and reports are deliberately not created/released from this
+    // dashboard. They belong in the prediction-review and report-editor flows.
+    throw new Exception('Unknown or unavailable dashboard action.');
 
 } catch (Throwable $e) {
-
     $_SESSION['flash'] = $e->getMessage();
-
     redirectDashboard();
 }
+
