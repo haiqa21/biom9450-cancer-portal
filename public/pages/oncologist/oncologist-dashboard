@@ -1,12 +1,7 @@
 
 <?php
 session_start();
-
 require_once __DIR__ . '/../../includes/db.php';
-
-// --------------------------------------------------
-// Authentication
-// --------------------------------------------------
 
 if (
     !isset($_SESSION['user_id'], $_SESSION['role']) ||
@@ -21,11 +16,10 @@ $user_id = (int) $_SESSION['user_id'];
 $stmt = $pdo->prepare("
     SELECT first_name, last_name, institution, speciality
     FROM professionals
-    WHERE user_id = ?
-      AND professional_type = 'oncologist'
+    WHERE user_id = ? AND professional_type = 'oncologist'
 ");
-
 $stmt->execute([$user_id]);
+
 $doctor = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$doctor) {
@@ -34,30 +28,21 @@ if (!$doctor) {
     exit;
 }
 
-// --------------------------------------------------
-// CSRF protection
-// --------------------------------------------------
-
 if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
 }
 
 $csrf = $_SESSION['csrf'];
 
-// --------------------------------------------------
-// Helper functions
-// --------------------------------------------------
-
-function h($value) {
-    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+function h($v) {
+    return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
 }
 
 function all(PDO $pdo, string $sql, array $args = []): array {
     try {
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($args);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $s = $pdo->prepare($sql);
+        $s->execute($args);
+        return $s->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         return [];
     }
@@ -65,152 +50,134 @@ function all(PDO $pdo, string $sql, array $args = []): array {
 
 function countRows(PDO $pdo, string $sql, array $args = []): int {
     try {
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($args);
-
-        return (int) $stmt->fetchColumn();
+        $s = $pdo->prepare($sql);
+        $s->execute($args);
+        return (int) $s->fetchColumn();
     } catch (Throwable $e) {
         return 0;
     }
 }
 
-// --------------------------------------------------
-// Patient data
 // Only patients assigned to this oncologist.
-// --------------------------------------------------
-
 $patients = all($pdo, "
-    SELECT
-        p.patient_id,
-        p.first_name,
-        p.last_name,
-        p.birthdate,
-        p.sex,
-        p.country
+    SELECT p.patient_id, p.first_name, p.last_name, p.birthdate, p.sex, p.country
     FROM patients p
-    JOIN oncologist_patients op
-        ON op.patient_id = p.patient_id
+    JOIN oncologist_patients op ON op.patient_id = p.patient_id
     WHERE op.user_id = ?
     ORDER BY p.last_name, p.first_name
 ", [$user_id]);
 
 $patientCount = count($patients);
 
-// --------------------------------------------------
-// Tasks
-// --------------------------------------------------
-
 $tasks = all($pdo, "
-    SELECT
-        t.*,
-        p.first_name AS pf,
-        p.last_name AS pl
+    SELECT t.*, p.first_name AS pf, p.last_name AS pl
     FROM oncologist_tasks t
-    LEFT JOIN patients p
-        ON p.patient_id = t.patient_id
+    LEFT JOIN patients p ON p.patient_id = t.patient_id
     WHERE t.user_id = ?
-    ORDER BY
-        (t.task_status = 'pending') DESC,
-        t.due_date IS NULL,
-        t.due_date,
-        t.created_at DESC
-", [$user_id]);
-
-$pendingTasks = count(
-    array_filter(
-        $tasks,
-        fn($t) => $t['task_status'] === 'pending'
+    AND (
+        t.patient_id IS NULL
+        OR EXISTS (
+            SELECT 1
+            FROM oncologist_patients op
+            WHERE op.user_id = ?
+            AND op.patient_id = t.patient_id
+        )
     )
-);
-
-// --------------------------------------------------
-// Upcoming appointments
-// --------------------------------------------------
+    ORDER BY (t.task_status = 'pending') DESC,
+             t.due_date IS NULL,
+             t.due_date,
+             t.created_at DESC
+", [$user_id, $user_id]);
 
 $appointments = all($pdo, "
-    SELECT
-        a.*,
-        p.first_name AS pf,
-        p.last_name AS pl
+    SELECT a.*, p.first_name AS pf, p.last_name AS pl
     FROM oncologist_appointments a
-    LEFT JOIN patients p
-        ON p.patient_id = a.patient_id
+    LEFT JOIN patients p ON p.patient_id = a.patient_id
     WHERE a.user_id = ?
-      AND a.appointment_status = 'scheduled'
-      AND a.appointment_datetime >= NOW()
+    AND a.appointment_status = 'scheduled'
+    AND a.appointment_datetime >= NOW()
+    AND (
+        a.patient_id IS NULL
+        OR EXISTS (
+            SELECT 1
+            FROM oncologist_patients op
+            WHERE op.user_id = ?
+            AND op.patient_id = a.patient_id
+        )
+    )
     ORDER BY a.appointment_datetime
     LIMIT 8
-", [$user_id]);
-
-$scheduledCount = countRows($pdo, "
-    SELECT COUNT(*)
-    FROM oncologist_appointments
-    WHERE user_id = ?
-      AND appointment_status = 'scheduled'
-      AND appointment_datetime >= NOW()
-", [$user_id]);
-
-// --------------------------------------------------
-// Reports
-// --------------------------------------------------
+", [$user_id, $user_id]);
 
 $reports = all($pdo, "
-    SELECT
-        r.*,
-        p.first_name AS pf,
-        p.last_name AS pl
+    SELECT r.*, p.first_name AS pf, p.last_name AS pl
     FROM oncologist_reports r
-    LEFT JOIN patients p
-        ON p.patient_id = r.patient_id
+    JOIN patients p ON p.patient_id = r.patient_id
+    JOIN oncologist_patients op
+        ON op.patient_id = r.patient_id
+        AND op.user_id = r.user_id
     WHERE r.user_id = ?
     ORDER BY r.created_at DESC
     LIMIT 8
 ", [$user_id]);
 
-$draftReports = count(
-    array_filter(
-        $reports,
-        fn($r) => $r['report_status'] === 'draft'
-    )
-);
-
-$releasedReports = countRows($pdo, "
-    SELECT COUNT(*)
-    FROM oncologist_reports
-    WHERE user_id = ?
-      AND report_status = 'released'
-", [$user_id]);
-
-// --------------------------------------------------
-// Recent activity
-// --------------------------------------------------
-
 $activity = all($pdo, "
-    SELECT
-        action,
-        entity_type,
-        details,
-        created_at
+    SELECT action, entity_type, details, created_at
     FROM audit_logs
     WHERE user_id = ?
     ORDER BY created_at DESC
     LIMIT 8
 ", [$user_id]);
 
-// --------------------------------------------------
-// Flash message
-// --------------------------------------------------
+$pendingTasks = count(array_filter(
+    $tasks,
+    fn($t) => $t['task_status'] === 'pending'
+));
+
+$draftReports = countRows($pdo, "
+    SELECT COUNT(*)
+    FROM oncologist_reports r
+    JOIN oncologist_patients op
+        ON op.patient_id = r.patient_id
+        AND op.user_id = r.user_id
+    WHERE r.user_id = ?
+    AND r.report_status = 'draft'
+", [$user_id]);
+
+$releasedReports = countRows($pdo, "
+    SELECT COUNT(*)
+    FROM oncologist_reports r
+    JOIN oncologist_patients op
+        ON op.patient_id = r.patient_id
+        AND op.user_id = r.user_id
+    WHERE r.user_id = ?
+    AND r.report_status = 'released'
+", [$user_id]);
+
+$scheduledCount = countRows($pdo, "
+    SELECT COUNT(*)
+    FROM oncologist_appointments a
+    WHERE a.user_id = ?
+    AND a.appointment_status = 'scheduled'
+    AND a.appointment_datetime >= NOW()
+    AND (
+        a.patient_id IS NULL
+        OR EXISTS (
+            SELECT 1
+            FROM oncologist_patients op
+            WHERE op.user_id = ?
+            AND op.patient_id = a.patient_id
+        )
+    )
+", [$user_id, $user_id]);
 
 $flash = $_SESSION['flash'] ?? '';
-
 unset($_SESSION['flash']);
 
 $fullName = $doctor['first_name'] . ' ' . $doctor['last_name'];
-
 ?>
 
-
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 
 <head>
@@ -218,776 +185,594 @@ $fullName = $doctor['first_name'] . ' ' . $doctor['last_name'];
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <title>CancerInsight | Clinical Workspace</title>
+
+    <link rel="stylesheet" href="../style/oncologist-dashboard.css">
 </head>
 
 <body>
 
-    <!-- Header -->
+<header class="header">
+    <div class="brand">
+        CancerInsight
+        <small>CLINICAL INTELLIGENCE</small>
+    </div>
 
-    <header class="header">
-        <div class="brand">
-            CancerInsight
-            <small>CLINICAL INTELLIGENCE</small>
+    <div class="header-right">
+        <span>Dr. <?= h($fullName) ?></span>
+        <a href="../logout.php">Log out</a>
+    </div>
+</header>
+
+<main class="wrap">
+
+    <section class="welcome">
+        <div>
+            <div class="eyebrow">CLINICAL WORKSPACE</div>
+
+            <h1>
+                Welcome back, Dr. <?= h($doctor['first_name']) ?>
+            </h1>
+
+            <p>
+                Review your caseload, prioritise outstanding work
+                and access patient records.
+            </p>
         </div>
 
-        <div class="header-right">
-            <span>Dr. <?= h($fullName) ?></span>
-            <a href="../logout.php">Log out</a>
+        <div class="profile-pill">
+            <strong><?= h($doctor['speciality'] ?: 'Oncologist') ?></strong>
+            <br>
+            <?= h($doctor['institution'] ?: 'Institution not specified') ?>
         </div>
-    </header>
+    </section>
 
-    <main class="wrap">
+    <?php if ($flash): ?>
+        <div class="flash">
+            <?= h($flash) ?>
+        </div>
+    <?php endif; ?>
 
-        <!-- Welcome section -->
+    <section class="cards">
 
-        <section class="welcome">
-            <div>
-                <div class="eyebrow">CLINICAL WORKSPACE</div>
+        <div class="metric">
+            <label>Assigned patients</label>
+            <strong><?= number_format($patientCount) ?></strong>
+            <small>Your current caseload</small>
+        </div>
 
-                <h1>
-                    Welcome back, Dr.
-                    <?= h($doctor['first_name']) ?>
-                </h1>
+        <div class="metric">
+            <label>Outstanding tasks</label>
+            <strong><?= number_format($pendingTasks) ?></strong>
+            <small>Tasks marked pending</small>
+        </div>
 
-                <p>
-                    Review your caseload, prioritise outstanding work
-                    and access patient records.
-                </p>
-            </div>
+        <div class="metric">
+            <label>Upcoming appointments</label>
+            <strong><?= number_format($scheduledCount) ?></strong>
+            <small>Scheduled appointments</small>
+        </div>
 
-            <div class="profile-pill">
-                <strong>
-                    <?= h($doctor['speciality'] ?: 'Oncologist') ?>
-                </strong>
+        <div class="metric">
+            <label>Draft reports</label>
+            <strong><?= number_format($draftReports) ?></strong>
+            <small><?= number_format($releasedReports) ?> released</small>
+        </div>
 
-                <br>
+    </section>
 
-                <?= h($doctor['institution'] ?: 'Institution not specified') ?>
-            </div>
-        </section>
+    <nav class="nav">
+        <a href="#patients">Patients</a>
+        <a href="#tasks">Tasks</a>
+        <a href="#appointments">Appointments</a>
+        <a href="#reports">Reports</a>
+        <a href="#activity">Activity</a>
+    </nav>
 
-        <!-- Flash messages -->
+    <div class="layout">
 
-        <?php if ($flash): ?>
-            <div class="flash">
-                <?= h($flash) ?>
-            </div>
-        <?php endif; ?>
+        <div>
 
-        <!-- Dashboard metrics -->
+            <!-- Patients -->
 
-        <section class="cards">
+            <section class="panel" id="patients">
 
-            <div class="metric">
-                <label>Assigned patients</label>
-                <strong><?= number_format($patientCount) ?></strong>
-                <small>Your current caseload</small>
-            </div>
-
-            <div class="metric">
-                <label>Outstanding tasks</label>
-                <strong><?= number_format($pendingTasks) ?></strong>
-                <small>Tasks marked pending</small>
-            </div>
-
-            <div class="metric">
-                <label>Upcoming appointments</label>
-                <strong><?= number_format($scheduledCount) ?></strong>
-                <small>Scheduled appointments</small>
-            </div>
-
-            <div class="metric">
-                <label>Draft reports</label>
-                <strong><?= number_format($draftReports) ?></strong>
-                <small>
-                    <?= number_format($releasedReports) ?> released
-                </small>
-            </div>
-
-        </section>
-
-        <!-- Navigation -->
-
-        <nav class="nav">
-            <a href="#patients">Patients</a>
-            <a href="#tasks">Tasks</a>
-            <a href="#appointments">Appointments</a>
-            <a href="#reports">Reports</a>
-            <a href="#activity">Activity</a>
-        </nav>
-
-        <!-- Dashboard columns -->
-
-        <div class="layout">
-
-            <!-- LEFT COLUMN -->
-
-            <div>
-
-                <!-- Patient list -->
-
-                <section class="panel" id="patients">
-
-                    <div class="panel-head">
-                        <div>
-                            <h2>My Patients</h2>
-                            <p>Patient records assigned to your care</p>
-                        </div>
-
-                        <span class="tag">
-                            <?= number_format($patientCount) ?> assigned
-                        </span>
+                <div class="panel-head">
+                    <div>
+                        <h2>My Patients</h2>
+                        <p>Patient records assigned to your care</p>
                     </div>
 
-                    <input
-                        class="search"
-                        id="patientSearch"
-                        type="search"
-                        placeholder="Search patients by name or ID"
-                    >
+                    <span class="tag">
+                        <?= number_format($patientCount) ?> assigned
+                    </span>
+                </div>
 
-                    <div class="patient-list" id="patientList">
+                <input
+                    class="search"
+                    id="patientSearch"
+                    type="search"
+                    placeholder="Search patients by name or ID"
+                >
 
-                        <?php if (!$patients): ?>
-                            <div class="empty">
-                                No patients have been assigned to your caseload yet.
-                            </div>
-                        <?php endif; ?>
+                <div class="patient-list" id="patientList">
 
-                        <?php foreach ($patients as $p): ?>
+                    <?php if (!$patients): ?>
+                        <div class="empty">
+                            No patients have been assigned to your caseload yet.
+                        </div>
+                    <?php endif; ?>
 
-                            <div
-                                class="patient-row"
-                                data-search="<?= h(strtolower(
-                                    $p['first_name'] . ' ' .
-                                    $p['last_name'] . ' ' .
-                                    $p['patient_id']
-                                )) ?>"
-                            >
-
-                                <div>
-                                    <div class="patient-name">
-                                        <?= h(
-                                            $p['first_name'] . ' ' .
-                                            $p['last_name']
-                                        ) ?>
-                                    </div>
-
-                                    <div class="meta">
-                                        Patient ID: <?= h($p['patient_id']) ?>
-
-                                        <?= $p['birthdate']
-                                            ? ' · DOB: ' . h($p['birthdate'])
-                                            : '' ?>
-                                    </div>
+                    <?php foreach ($patients as $p): ?>
+                        <div
+                            class="patient-row"
+                            data-search="<?= h(strtolower(
+                                $p['first_name'] . ' ' .
+                                $p['last_name'] . ' ' .
+                                $p['patient_id']
+                            )) ?>"
+                        >
+                            <div>
+                                <div class="patient-name">
+                                    <?= h($p['first_name'] . ' ' . $p['last_name']) ?>
                                 </div>
 
-                                <a href="patient-details.php?patient_id=<?= urlencode(
-                                    (string) $p['patient_id']
-                                ) ?>">
-                                    Open record →
-                                </a>
-
+                                <div class="meta">
+                                    Patient ID: <?= h($p['patient_id']) ?>
+                                    <?= $p['birthdate']
+                                        ? ' · DOB: ' . h($p['birthdate'])
+                                        : '' ?>
+                                </div>
                             </div>
 
-                        <?php endforeach; ?>
-
-                    </div>
-
-                </section>
-
-                <!-- Tasks -->
-
-                <section class="panel" id="tasks">
-
-                    <div class="panel-head">
-                        <div>
-                            <h2>My Tasks</h2>
-                            <p>
-                                Keep track of clinical and administrative follow-ups
-                            </p>
+                            <a href="patient-details.php?patient_id=<?= urlencode(
+                                (string) $p['patient_id']
+                            ) ?>">
+                                Open record →
+                            </a>
                         </div>
+                    <?php endforeach; ?>
 
-                        <span class="tag warn">
-                            <?= $pendingTasks ?> pending
-                        </span>
+                </div>
+
+            </section>
+
+            <!-- Tasks -->
+
+            <section class="panel" id="tasks">
+
+                <div class="panel-head">
+                    <div>
+                        <h2>My Tasks</h2>
+                        <p>Keep track of clinical and administrative follow-ups</p>
                     </div>
 
-                    <!-- Add task form -->
+                    <span class="tag warn">
+                        <?= $pendingTasks ?> pending
+                    </span>
+                </div>
 
-                    <form method="post" action="dashboard-actions.php">
+                <form method="post" action="dashboard-actions.php">
 
+                    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+                    <input type="hidden" name="action" value="task_add">
+
+                    <label>
+                        Task title
                         <input
-                            type="hidden"
-                            name="csrf"
-                            value="<?= h($csrf) ?>"
+                            name="title"
+                            maxlength="255"
+                            required
+                            placeholder="e.g. Follow up with patient"
                         >
+                    </label>
 
-                        <input
-                            type="hidden"
-                            name="action"
-                            value="task_add"
-                        >
+                    <label>
+                        Description
+                        <textarea name="description" rows="2"></textarea>
+                    </label>
+
+                    <div class="form-row">
 
                         <label>
-                            Task title
-
-                            <input
-                                name="title"
-                                maxlength="255"
-                                required
-                                placeholder="e.g. Follow up with patient"
-                            >
+                            Due date
+                            <input type="datetime-local" name="due_date">
                         </label>
 
                         <label>
-                            Description
+                            Patient (optional)
+                            <select name="patient_id">
+                                <option value="">Unlinked</option>
 
-                            <textarea
-                                name="description"
-                                rows="2"
-                            ></textarea>
+                                <?php foreach ($patients as $p): ?>
+                                    <option value="<?= h($p['patient_id']) ?>">
+                                        <?= h($p['last_name'] . ', ' . $p['first_name']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+
+                            </select>
                         </label>
 
-                        <div class="form-row">
+                    </div>
 
-                            <label>
-                                Due date
+                    <button class="btn" type="submit">
+                        Add task
+                    </button>
 
-                                <input
-                                    type="datetime-local"
-                                    name="due_date"
-                                >
-                            </label>
+                </form>
 
-                            <label>
-                                Patient (optional)
+                <div class="item-list item-list-spaced">
 
-                                <select name="patient_id">
-                                    <option value="">Unlinked</option>
-
-                                    <?php foreach ($patients as $p): ?>
-                                        <option value="<?= h($p['patient_id']) ?>">
-                                            <?= h(
-                                                $p['last_name'] . ', ' .
-                                                $p['first_name']
-                                            ) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-
-                                </select>
-                            </label>
-
+                    <?php if (!$tasks): ?>
+                        <div class="empty">
+                            No tasks recorded.
                         </div>
+                    <?php endif; ?>
 
-                        <button class="btn" type="submit">
-                            Add task
-                        </button>
+                    <?php foreach ($tasks as $t): ?>
 
-                    </form>
+                        <div class="item">
 
-                    <!-- Existing tasks -->
-
-                    <div class="item-list" style="margin-top:14px">
-
-                        <?php if (!$tasks): ?>
-                            <div class="empty">
-                                No tasks recorded.
-                            </div>
-                        <?php endif; ?>
-
-                        <?php foreach ($tasks as $t): ?>
-
-                            <div class="item">
-
-                                <div>
-                                    <div class="item-title">
-                                        <?= h($t['task_title']) ?>
-                                    </div>
-
-                                    <?php if ($t['task_description']): ?>
-                                        <p>
-                                            <?= h($t['task_description']) ?>
-                                        </p>
-                                    <?php endif; ?>
-
-                                    <div class="meta">
-
-                                        <?= $t['pf']
-                                            ? 'Patient: ' .
-                                                h($t['pf'] . ' ' . $t['pl']) .
-                                                ' · '
-                                            : '' ?>
-
-                                        <?= $t['due_date']
-                                            ? 'Due ' . h(
-                                                date(
-                                                    'd M Y H:i',
-                                                    strtotime($t['due_date'])
-                                                )
-                                            )
-                                            : 'No due date' ?>
-
-                                        · <?= h($t['task_status']) ?>
-
-                                    </div>
+                            <div>
+                                <div class="item-title">
+                                    <?= h($t['task_title']) ?>
                                 </div>
 
-                                <div style="display:flex;gap:6px;flex-wrap:wrap">
-
-                                    <!-- Toggle task status -->
-
-                                    <form
-                                        method="post"
-                                        action="dashboard-actions.php"
-                                    >
-
-                                        <input
-                                            type="hidden"
-                                            name="csrf"
-                                            value="<?= h($csrf) ?>"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="action"
-                                            value="task_toggle"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="id"
-                                            value="<?= h($t['task_id']) ?>"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="status"
-                                            value="<?= $t['task_status'] === 'completed'
-                                                ? 'pending'
-                                                : 'completed' ?>"
-                                        >
-
-                                        <button
-                                            class="btn secondary"
-                                            type="submit"
-                                        >
-                                            <?= $t['task_status'] === 'completed'
-                                                ? 'Undo'
-                                                : 'Complete' ?>
-                                        </button>
-
-                                    </form>
-
-                                    <!-- Delete task -->
-
-                                    <form
-                                        method="post"
-                                        action="dashboard-actions.php"
-                                        onsubmit="return confirm('Delete this task?')"
-                                    >
-
-                                        <input
-                                            type="hidden"
-                                            name="csrf"
-                                            value="<?= h($csrf) ?>"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="action"
-                                            value="task_delete"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="id"
-                                            value="<?= h($t['task_id']) ?>"
-                                        >
-
-                                        <button
-                                            class="btn danger"
-                                            type="submit"
-                                        >
-                                            Delete
-                                        </button>
-
-                                    </form>
-
-                                </div>
-
-                            </div>
-
-                        <?php endforeach; ?>
-
-                    </div>
-
-                </section>
-
-            </div>
-
-            <!-- RIGHT COLUMN -->
-
-            <div>
-
-                <!-- Appointments -->
-
-                <section class="panel" id="appointments">
-
-                    <div class="panel-head">
-                        <div>
-                            <h2>Upcoming appointments</h2>
-                            <p>Your next scheduled appointments</p>
-                        </div>
-                    </div>
-
-                    <!-- Schedule appointment -->
-
-                    <form method="post" action="dashboard-actions.php">
-
-                        <input
-                            type="hidden"
-                            name="csrf"
-                            value="<?= h($csrf) ?>"
-                        >
-
-                        <input
-                            type="hidden"
-                            name="action"
-                            value="appointment_add"
-                        >
-
-                        <label>
-                            Appointment title
-
-                            <input
-                                name="title"
-                                maxlength="255"
-                                required
-                            >
-                        </label>
-
-                        <div class="form-row">
-
-                            <label>
-                                Date and time
-
-                                <input
-                                    type="datetime-local"
-                                    name="when"
-                                    required
-                                >
-                            </label>
-
-                            <label>
-                                Patient
-
-                                <select name="patient_id">
-                                    <option value="">Unlinked</option>
-
-                                    <?php foreach ($patients as $p): ?>
-                                        <option value="<?= h($p['patient_id']) ?>">
-                                            <?= h(
-                                                $p['last_name'] . ', ' .
-                                                $p['first_name']
-                                            ) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-
-                                </select>
-                            </label>
-
-                        </div>
-
-                        <label>
-                            Location
-
-                            <input name="location">
-                        </label>
-
-                        <label>
-                            Notes
-
-                            <textarea
-                                name="notes"
-                                rows="2"
-                            ></textarea>
-                        </label>
-
-                        <button class="btn" type="submit">
-                            Schedule appointment
-                        </button>
-
-                    </form>
-
-                    <!-- Upcoming appointment list -->
-
-                    <div class="item-list" style="margin-top:14px">
-
-                        <?php if (!$appointments): ?>
-                            <div class="empty">
-                                No upcoming appointments.
-                            </div>
-                        <?php endif; ?>
-
-                        <?php foreach ($appointments as $a): ?>
-
-                            <div class="item">
-
-                                <div>
-                                    <div class="item-title">
-                                        <?= h($a['appointment_title']) ?>
-                                    </div>
-
+                                <?php if ($t['task_description']): ?>
                                     <p>
-                                        <?= h(
-                                            date(
-                                                'd M Y · H:i',
-                                                strtotime(
-                                                    $a['appointment_datetime']
-                                                )
-                                            )
-                                        ) ?>
-
-                                        <?= $a['location']
-                                            ? ' · ' . h($a['location'])
-                                            : '' ?>
+                                        <?= h($t['task_description']) ?>
                                     </p>
+                                <?php endif; ?>
 
-                                    <div class="meta">
-                                        <?= $a['pf']
-                                            ? h($a['pf'] . ' ' . $a['pl'])
-                                            : 'No patient linked' ?>
-                                    </div>
+                                <div class="meta">
+                                    <?= $t['pf']
+                                        ? 'Patient: ' . h($t['pf'] . ' ' . $t['pl']) . ' · '
+                                        : '' ?>
+
+                                    <?= $t['due_date']
+                                        ? 'Due ' . h(date(
+                                            'd M Y H:i',
+                                            strtotime($t['due_date'])
+                                        ))
+                                        : 'No due date' ?>
+
+                                    · <?= h($t['task_status']) ?>
                                 </div>
+                            </div>
 
-                                <!-- Cancel appointment -->
+                            <div class="task-actions">
+
+                                <form method="post" action="dashboard-actions.php">
+                                    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+                                    <input type="hidden" name="action" value="task_toggle">
+                                    <input type="hidden" name="id" value="<?= h($t['task_id']) ?>">
+                                    <input
+                                        type="hidden"
+                                        name="status"
+                                        value="<?= $t['task_status'] === 'completed'
+                                            ? 'pending'
+                                            : 'completed' ?>"
+                                    >
+
+                                    <button class="btn secondary" type="submit">
+                                        <?= $t['task_status'] === 'completed'
+                                            ? 'Undo'
+                                            : 'Complete' ?>
+                                    </button>
+                                </form>
 
                                 <form
                                     method="post"
                                     action="dashboard-actions.php"
+                                    onsubmit="return confirm('Delete this task?')"
                                 >
+                                    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+                                    <input type="hidden" name="action" value="task_delete">
+                                    <input type="hidden" name="id" value="<?= h($t['task_id']) ?>">
 
-                                    <input
-                                        type="hidden"
-                                        name="csrf"
-                                        value="<?= h($csrf) ?>"
-                                    >
-
-                                    <input
-                                        type="hidden"
-                                        name="action"
-                                        value="appointment_cancel"
-                                    >
-
-                                    <input
-                                        type="hidden"
-                                        name="id"
-                                        value="<?= h($a['appointment_id']) ?>"
-                                    >
-
-                                    <button
-                                        class="btn danger"
-                                        type="submit"
-                                    >
-                                        Cancel
+                                    <button class="btn danger" type="submit">
+                                        Delete
                                     </button>
-
                                 </form>
 
-                            </div>
-
-                        <?php endforeach; ?>
-
-                    </div>
-
-                </section>
-
-                <!-- Reports -->
-
-                <section class="panel" id="reports">
-
-                    <div class="panel-head">
-                        <div>
-                            <h2>Reports</h2>
-                            <p>Recent draft and released reports</p>
-                        </div>
-                    </div>
-
-                    <div class="item-list">
-
-                        <?php if (!$reports): ?>
-                            <div class="empty">
-                                No reports recorded.
-                            </div>
-                        <?php endif; ?>
-
-                        <?php foreach ($reports as $r): ?>
-
-                            <div class="item">
-
-                                <div>
-                                    <div class="item-title">
-                                        <?= h($r['report_title']) ?>
-                                    </div>
-
-                                    <div class="meta">
-                                        <?= $r['pf']
-                                            ? h($r['pf'] . ' ' . $r['pl']) . ' · '
-                                            : '' ?>
-
-                                        <?= h($r['report_status']) ?>
-
-                                        · <?= h(
-                                            date(
-                                                'd M Y',
-                                                strtotime($r['created_at'])
-                                            )
-                                        ) ?>
-                                    </div>
-
-                                    <?php if ($r['report_summary']): ?>
-                                        <p>
-                                            <?= h($r['report_summary']) ?>
-                                        </p>
-                                    <?php endif; ?>
-
-                                </div>
-
-                                <span class="tag <?= $r['report_status'] === 'draft'
-                                    ? 'warn'
-                                    : '' ?>">
-                                    <?= h($r['report_status']) ?>
-                                </span>
-
-                            </div>
-
-                        <?php endforeach; ?>
-
-                    </div>
-
-                    <p class="note">
-                        Reports should be created and edited from the patient's
-                        clinical workflow. This section is an overview only.
-                    </p>
-
-                </section>
-
-                <!-- Recent activity -->
-
-                <section class="panel" id="activity">
-
-                    <div class="panel-head">
-                        <div>
-                            <h2>Recent activity</h2>
-                            <p>Latest recorded workspace actions</p>
-                        </div>
-                    </div>
-
-                    <?php if (!$activity): ?>
-                        <div class="empty">
-                            No activity recorded yet.
-                        </div>
-                    <?php endif; ?>
-
-                    <?php foreach ($activity as $a): ?>
-
-                        <div class="activity">
-
-                            <strong>
-                                <?= h(
-                                    str_replace('_', ' ', $a['action'])
-                                ) ?>
-                            </strong>
-
-                            <div class="meta">
-                                <?= h($a['details'] ?? '') ?>
-
-                                · <?= h($a['entity_type'] ?? '') ?>
-
-                                · <?= h(
-                                    date(
-                                        'd M Y H:i',
-                                        strtotime($a['created_at'])
-                                    )
-                                ) ?>
                             </div>
 
                         </div>
 
                     <?php endforeach; ?>
 
-                </section>
+                </div>
 
-                <!-- Professional profile -->
-
-                <section class="panel">
-
-                    <div class="panel-head">
-                        <div>
-                            <h2>Professional profile</h2>
-                            <p>Account information</p>
-                        </div>
-                    </div>
-
-                    <div class="footer-profile">
-
-                        <div>
-                            <span>Name</span>
-                            <strong>
-                                Dr. <?= h($fullName) ?>
-                            </strong>
-                        </div>
-
-                        <div>
-                            <span>Speciality</span>
-                            <strong>
-                                <?= h(
-                                    $doctor['speciality'] ?: 'Not specified'
-                                ) ?>
-                            </strong>
-                        </div>
-
-                        <div>
-                            <span>Institution</span>
-                            <strong>
-                                <?= h(
-                                    $doctor['institution'] ?: 'Not specified'
-                                ) ?>
-                            </strong>
-                        </div>
-
-                    </div>
-
-                </section>
-
-            </div>
+            </section>
 
         </div>
 
-        <!-- Disclaimer -->
+        <div>
 
-        <p class="note">
-            CancerInsight is a research and workflow prototype.
-            Information shown is not a substitute for clinical judgement.
-        </p>
+            <!-- Appointments -->
 
-    </main>
+            <section class="panel" id="appointments">
 
-    <!-- Patient search functionality -->
+                <div class="panel-head">
+                    <div>
+                        <h2>Upcoming appointments</h2>
+                        <p>Your next scheduled appointments</p>
+                    </div>
+                </div>
 
-    <script>
-        const search = document.getElementById('patientSearch');
+                <form method="post" action="dashboard-actions.php">
 
-        search.addEventListener('input', () => {
-            const q = search.value.trim().toLowerCase();
+                    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+                    <input type="hidden" name="action" value="appointment_add">
 
-            document.querySelectorAll('#patientList .patient-row')
-                .forEach(row => {
-                    row.hidden = !row.dataset.search.includes(q);
-                });
+                    <label>
+                        Appointment title
+                        <input name="title" maxlength="255" required>
+                    </label>
+
+                    <div class="form-row">
+
+                        <label>
+                            Date and time
+                            <input type="datetime-local" name="when" required>
+                        </label>
+
+                        <label>
+                            Patient
+                            <select name="patient_id">
+                                <option value="">Unlinked</option>
+
+                                <?php foreach ($patients as $p): ?>
+                                    <option value="<?= h($p['patient_id']) ?>">
+                                        <?= h($p['last_name'] . ', ' . $p['first_name']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+
+                            </select>
+                        </label>
+
+                    </div>
+
+                    <label>
+                        Location
+                        <input name="location">
+                    </label>
+
+                    <label>
+                        Notes
+                        <textarea name="notes" rows="2"></textarea>
+                    </label>
+
+                    <button class="btn" type="submit">
+                        Schedule appointment
+                    </button>
+
+                </form>
+
+                <div class="item-list item-list-spaced">
+
+                    <?php if (!$appointments): ?>
+                        <div class="empty">
+                            No upcoming appointments.
+                        </div>
+                    <?php endif; ?>
+
+                    <?php foreach ($appointments as $a): ?>
+
+                        <div class="item">
+
+                            <div>
+                                <div class="item-title">
+                                    <?= h($a['appointment_title']) ?>
+                                </div>
+
+                                <p>
+                                    <?= h(date(
+                                        'd M Y · H:i',
+                                        strtotime($a['appointment_datetime'])
+                                    )) ?>
+
+                                    <?= $a['location']
+                                        ? ' · ' . h($a['location'])
+                                        : '' ?>
+                                </p>
+
+                                <div class="meta">
+                                    <?= $a['pf']
+                                        ? h($a['pf'] . ' ' . $a['pl'])
+                                        : 'No patient linked' ?>
+                                </div>
+                            </div>
+
+                            <form method="post" action="dashboard-actions.php">
+                                <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+                                <input type="hidden" name="action" value="appointment_cancel">
+                                <input
+                                    type="hidden"
+                                    name="id"
+                                    value="<?= h($a['appointment_id']) ?>"
+                                >
+
+                                <button class="btn danger" type="submit">
+                                    Cancel
+                                </button>
+                            </form>
+
+                        </div>
+
+                    <?php endforeach; ?>
+
+                </div>
+
+            </section>
+
+            <!-- Reports -->
+
+            <section class="panel" id="reports">
+
+                <div class="panel-head">
+                    <div>
+                        <h2>Reports</h2>
+                        <p>Recent draft and released reports</p>
+                    </div>
+                </div>
+
+                <div class="item-list">
+
+                    <?php if (!$reports): ?>
+                        <div class="empty">
+                            No reports recorded.
+                        </div>
+                    <?php endif; ?>
+
+                    <?php foreach ($reports as $r): ?>
+
+                        <div class="item">
+
+                            <div>
+                                <div class="item-title">
+                                    <?= h($r['report_title']) ?>
+                                </div>
+
+                                <div class="meta">
+                                    <?= $r['pf']
+                                        ? h($r['pf'] . ' ' . $r['pl']) . ' · '
+                                        : '' ?>
+
+                                    <?= h($r['report_status']) ?>
+                                    ·
+                                    <?= h(date(
+                                        'd M Y',
+                                        strtotime($r['created_at'])
+                                    )) ?>
+                                </div>
+
+                                <?php if ($r['report_summary']): ?>
+                                    <p>
+                                        <?= h($r['report_summary']) ?>
+                                    </p>
+                                <?php endif; ?>
+
+                            </div>
+
+                            <span class="tag <?= $r['report_status'] === 'draft'
+                                ? 'warn'
+                                : '' ?>">
+                                <?= h($r['report_status']) ?>
+                            </span>
+
+                        </div>
+
+                    <?php endforeach; ?>
+
+                </div>
+
+                <p class="note">
+                    Reports should be created and edited from the patient's
+                    clinical workflow. This section is an overview only.
+                </p>
+
+            </section>
+
+            <!-- Activity -->
+
+            <section class="panel" id="activity">
+
+                <div class="panel-head">
+                    <div>
+                        <h2>Recent activity</h2>
+                        <p>Latest recorded workspace actions</p>
+                    </div>
+                </div>
+
+                <?php if (!$activity): ?>
+                    <div class="empty">
+                        No activity recorded yet.
+                    </div>
+                <?php endif; ?>
+
+                <?php foreach ($activity as $a): ?>
+
+                    <div class="activity">
+
+                        <strong>
+                            <?= h(str_replace('_', ' ', $a['action'])) ?>
+                        </strong>
+
+                        <div class="meta">
+                            <?= h($a['details'] ?? '') ?>
+                            ·
+                            <?= h($a['entity_type'] ?? '') ?>
+                            ·
+                            <?= h(date(
+                                'd M Y H:i',
+                                strtotime($a['created_at'])
+                            )) ?>
+                        </div>
+
+                    </div>
+
+                <?php endforeach; ?>
+
+            </section>
+
+            <!-- Professional profile -->
+
+            <section class="panel">
+
+                <div class="panel-head">
+                    <div>
+                        <h2>Professional profile</h2>
+                        <p>Account information</p>
+                    </div>
+                </div>
+
+                <div class="footer-profile">
+
+                    <div>
+                        <span>Name</span>
+                        <strong>Dr. <?= h($fullName) ?></strong>
+                    </div>
+
+                    <div>
+                        <span>Speciality</span>
+                        <strong>
+                            <?= h($doctor['speciality'] ?: 'Not specified') ?>
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Institution</span>
+                        <strong>
+                            <?= h($doctor['institution'] ?: 'Not specified') ?>
+                        </strong>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </div>
+
+    <p class="note">
+        CancerInsight is a research and workflow prototype.
+        Information shown is not a substitute for clinical judgement.
+    </p>
+
+</main>
+
+<script>
+    const search = document.getElementById('patientSearch');
+
+    search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+
+        document.querySelectorAll('#patientList .patient-row').forEach(row => {
+            row.hidden = !row.dataset.search.includes(q);
         });
-    </script>
+    });
+</script>
 
 </body>
 </html>
